@@ -67,6 +67,51 @@ Use `-frontmatter` to supply FileMaker variable assignments to an action script.
 See [Act in the command guide](docs/cli.md#2-act) for an example and details of
 frontmatter merging.
 
+### Agent loop: run an fmIDEAS and return its result
+
+An agent can ask fmIDE to write the result of an asynchronous action to a file
+that it monitors. The fmIDEAS stays the same as it would be for a normal call
+from inside FileMaker; the result destination is supplied through frontmatter.
+
+For example, this runs an action in `MyFile` using FileMaker 26 and writes the
+current timestamp to the user's Desktop:
+
+```sh
+fmide -fmp fmp26 -file MyFile \
+  -frontmatter '$fmide_on_exit_script_write_data_to_file_path = Get ( DesktopPath ) & "script_result.txt"' \
+  '[+].Exit Script = == Get ( CurrentTimestamp )'
+```
+
+The agent can monitor `script_result.txt` and read the value after FileMaker
+has run the action. Add the debugger variable when diagnosing an action:
+
+```sh
+fmide -fmp fmp26 -file MyFile \
+  -frontmatter '$fmide_debugger = 1; $fmide_on_exit_script_write_data_to_file_path = Get ( DesktopPath ) & "script_result.txt"' \
+  '[+].Exit Script = == Get ( CurrentTimestamp )'
+```
+
+To collect the result and error details together, point fmIDE at a folder:
+
+```sh
+fmide -fmp fmp26 -file MyFile \
+  -frontmatter '$fmide_on_exit_script_write_data_to_folder_path = Get ( DesktopPath ) & "fmIDE_results/"' \
+  '[+].Exit Script = == Get ( CurrentTimestamp )'
+```
+
+The folder form writes `script_result.txt`, `last_error.txt`,
+`last_error_detail.txt`, `last_error_location.txt` and
+`last_error_description.txt`. FileMaker creates these before `Exit Script`
+returns. Replace `MyFile` with another open or hosted file; use `-server HOST`
+when the file should be opened from a server instead of through `$` (the
+currently open file).
+
+This closes the agent loop:
+
+```text
+AI agent → fmide CLI → FMP URL → fmIDE script → fmIDEAS → result file → AI agent
+```
+
 ## 3. Link
 
 Open an existing FMP URL with `-url`. Supported mangled prefixes are repaired
@@ -155,6 +200,20 @@ python3 -m unittest discover -v
 ```
 
 The live integration test is opt-in. The ordinary suite never opens FileMaker.
+
+## Planned: local HTTP forwarding
+
+A planned option will start a small local Python server on `localhost:43103`.
+It will accept HTTP links and forward them as FMP URLs to the appropriate
+FileMaker client, making fmIDE links usable in documentation or clickable agent
+output. The port is a visual mnemonic:
+
+```text
+4 3 1 0 3
+f m I D E
+```
+
+This HTTP server is not part of the current release.
 
 ## License
 
