@@ -41,7 +41,14 @@ fmide -file fmIDE '-$' 'layout_name=fmIDE Examples'
 
 # Show the fmIDE script at step 5.
 fmide -file fmIDE '-$' 'script_name=fmIDE' '-$' 'script_step_number=5'
+
+# Build a Name that Thing call manually from an FMP URL.
+fmide -url 'fmp26://$/MyFile' '-$' 'script_name=Hello' '-$' 'script_step_number=4'
 ```
+
+When the URL does not already have a `script` parameter, the CLI adds
+`?script=fmIDE`. It also encodes the `-$` parameters for you, so names and values
+can be entered directly without manually URL-encoding them.
 
 Add `-fmp fmp26` to choose FileMaker 26. On macOS, you can omit `-file` to use
 the frontmost database in the selected FileMaker client, when its permissions

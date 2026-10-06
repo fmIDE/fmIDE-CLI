@@ -22,7 +22,14 @@ the object you want to show. The CLI constructs the call to fmIDE for you.
 ```sh
 fmide -file fmIDE '-$' 'layout_name=fmIDE Examples'
 fmide -file fmIDE '-$' 'script_name=fmIDE' '-$' 'script_step_number=5'
+
+# Supply Name that Thing parameters alongside a manually chosen FMP URL.
+fmide -url 'fmp26://$/MyFile' '-$' 'script_name=Hello' '-$' 'script_step_number=4'
 ```
+
+If the URL has no `script` parameter, the CLI adds `?script=fmIDE`. It appends
+and URL-encodes the `-$` parameters, so you can type their names and values
+directly instead of encoding them yourself.
 
 Each `-$ NAME=VALUE` supplies a local variable to fmIDE. `--variable` is an
 alias for `-$`, and an optional leading `$` on NAME is accepted. Repeat the
