@@ -41,3 +41,26 @@ actionable error and accepts `-file fmIDE`. No FileMaker privileges were changed
 Successful frontmost discovery is covered with a mocked operating-system
 response; that is not a claim of successful live discovery. Windows dispatch is
 implemented but was not tested against a live Windows FileMaker installation.
+
+## Packaging and hosted CI
+
+The v0.1.0 source distribution and wheel built successfully. The wheel was
+installed in an isolated environment outside the checkout; both `fmide` and
+`fmIDE` passed their version/preview checks. Every Python module in the wheel
+was compared byte-for-byte with the published source.
+
+[All six CI jobs passed](https://github.com/fmIDE/fmIDE-CLI/actions/runs/37423179097):
+Python 3.10 and 3.14 on Linux, macOS and Windows, including package builds and
+installation checks. These do not require a FileMaker installation.
+
+The documented Homebrew tap and `brew install --build-from-source fmide/cli/fmide`
+succeeded on macOS. The installed code in Homebrew's `libexec` passed the live
+FileMaker integration test again, returning the exact JSON shown above.
+
+Homebrew's normal `brew test` wrapper stopped at its dependency-version check:
+it reported several installed dependencies as missing. Homebrew had installed
+Python 3.14.5, while its general formula metadata described 3.14.8. No further
+system-wide dependency upgrades were performed for that check. The formula's
+actual `test do` block was invoked through Homebrew's Ruby `Formula#run_test`
+against the installed package; all three command assertions passed. This is
+separate from a successful run of the normal `brew test` wrapper.

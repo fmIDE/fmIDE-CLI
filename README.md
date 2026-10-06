@@ -26,8 +26,16 @@ python3 -m venv .venv
 .venv/bin/fmide --help
 ```
 
-There are no third-party Python runtime dependencies. From a checkout you can
-also run `./fmide` or `python3 -m fmide_cli` without installing anything.
+The CLI uses only Python's standard library: it needs **Python 3.10+**, but no
+additional Python packages from pip. With a compatible Python already installed,
+you can run `./fmide` or `python3 -m fmide_cli` from a checkout.
+
+The **Homebrew formula depends on `python@3.14`**. Homebrew may install or upgrade
+Python and its native dependencies: certificate and TLS libraries, decimal
+arithmetic, SQLite, command-line editing and compression libraries. These belong
+to the full Python runtime and its dependency chain; the CLI does not directly
+use most of their features. The exact list depends on Homebrew's Python build.
+See [Homebrew's Python formula](https://formulae.brew.sh/formula/python@3.14).
 Windows supports explicit-file URL dispatch; Linux supports URL previews.
 
 ## Quick start
