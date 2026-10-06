@@ -22,11 +22,13 @@ FMIDE_LIVE_FILE=fmIDE FMIDE_LIVE_PROTOCOL=fmp26 \
   python3 -m unittest tests.test_live -v
 ```
 
-The test sends one deliberately mangled URL through the CLI, replaces its
-protocol/file and duplicate variables, prepends frontmatter to an existing
-block, and executes a small action script. FileMaker writes its name, fmIDE
-version, merged text and variable into a unique temporary JSON file. Assertions
-validate those contents, proving execution rather than only OS dispatch.
+The test verifies **Act** by running an fmIDEAS that writes the database name,
+fmIDE version, merged text and a variable into a unique temporary JSON file.
+Assertions validate those contents, proving execution rather than only OS
+dispatch. The same test also exercises **Link** and **Modify link** by supplying
+a mangled URL, replacing its protocol/file and duplicate variables, and
+prepending frontmatter to an existing block. **Show** navigation was verified
+separately in the [initial live verification](verification.md).
 It does not edit database records, layouts, scripts or schema. It requires
 fmIDE's native data-file actions and FileMaker's ConvertToFileMakerPath function.
 The temporary directory is removed after the test. Inspect FileMaker if it

@@ -1,24 +1,135 @@
 # fmIDE CLI
 
-Call [fmIDE](https://github.com/fmIDE/fmIDE) in FileMaker Pro from your terminal.
-Build, repair, preview and open FMP URLs for the **Name that Thing API** and
-**fmIDE action scripts**. Implements [fmIDE: CLI #135](https://github.com/fmIDE/fmIDE/issues/135).
+Call [fmIDE](https://github.com/fmIDE/fmIDE) in FileMaker Pro from your terminal:
+
+1. **[Show](#1-show)** — call the fmIDE **Name that Thing API** to show something in your solution.
+2. **[Act](#2-act)** — run an **fmIDE Action Script (fmIDEAS)**.
+3. **[Link](#3-link)** — open an FMP URL, repairing a mangled link when necessary.
+4. **[Modify link](#4-modify-link)** — adapt an existing link to another FileMaker client, server or file, or add parameters and frontmatter.
+
+Implements [fmIDE: CLI #135](https://github.com/fmIDE/fmIDE/issues/135).
 
 ## Install with Homebrew
 
 ```sh
 brew tap fmide/cli https://github.com/fmIDE/fmIDE-CLI.git
 brew install fmide/cli/fmide
-fmide --version
 ```
 
-This repository is also its own Homebrew tap; the explicit URL is necessary
-because its name does not start with `homebrew-`. The formula installs Python
-and the command. FileMaker Pro and the fmIDE script are installed separately.
-Both `fmide` and `fmIDE` work (on case-sensitive filesystems an alias is installed).
-Homebrew installation targets macOS.
+Both `fmide` and `fmIDE` work. FileMaker Pro and the fmIDE script are installed
+separately. See [installation details](#installation-details) for Python
+requirements and alternatives to Homebrew.
 
-Alternatively, with Python 3.10 or later:
+## Before you start
+
+For **Show** and **Act**, open your database in FileMaker. It must contain the
+`fmIDE` script and your account must have the `fmurlscript` extended privilege.
+The examples below target the `fmIDE` demo file; replace `-file fmIDE` with your
+own database name when working in another solution.
+
+Quote URLs and `$` expressions with **single quotes** in POSIX shells.
+`--variable` is a long alias for `-$`.
+
+## 1. Show
+
+Name a thing in your solution and let fmIDE take you to it. Pass each
+**Name that Thing** parameter with `-$`; no URL is needed.
+
+```sh
+# Show a layout.
+fmide -file fmIDE '-$' 'layout_name=fmIDE Examples'
+
+# Show the fmIDE script at step 5.
+fmide -file fmIDE '-$' 'script_name=fmIDE' '-$' 'script_step_number=5'
+```
+
+Add `-fmp fmp26` to choose FileMaker 26. On macOS, you can omit `-file` to use
+the frontmost database in the selected FileMaker client, when its permissions
+allow discovery. See [choosing the target](docs/cli.md#choosing-the-target).
+
+## 2. Act
+
+Pass an **fmIDEAS** to execute FileMaker development actions. Supply its text
+inline, read it from a UTF-8 file, or pipe it into the command.
+
+```sh
+# Run an inline action script.
+fmide -file fmIDE '[+].Go to Layout = "fmIDE Examples"'
+
+# Run an action script saved in a file.
+fmide -file fmIDE --parameter-file actions.fmJAML
+
+# Run an action script from stdin.
+cat actions.fmJAML | fmide -file fmIDE -
+```
+
+Use `-frontmatter` to supply FileMaker variable assignments to an action script.
+See [Act in the command guide](docs/cli.md#2-act) for an example and details of
+frontmatter merging.
+
+## 3. Link
+
+Open an existing FMP URL with `-url`. Supported mangled prefixes are repaired
+automatically, so a copied link can be used directly.
+
+```sh
+# Open an FMP link.
+fmide -url 'fmp26://$/fmIDE?script=fmIDE&$layout_name=fmIDE Examples'
+
+# Open the same link after its protocol was mangled.
+fmide -url 'https://fmp26//$/fmIDE?script=fmIDE&$layout_name=fmIDE Examples'
+```
+
+Short **thingamajig URIs** also work, such as
+`fmide -url 'fmIDE&$script_name=fmIDE'`.
+See [Link in the command guide](docs/cli.md#3-link) for supported repairs.
+
+## 4. Modify link
+
+Combine `-url` with options when you want to adapt a link. Only the specified
+parts change; for example, choose another FileMaker client, open the file from
+a server, or add frontmatter to the linked action script.
+
+```sh
+# Use FileMaker 26 for a link that names another client version.
+fmide -url 'fmp19://$/fmIDE?script=fmIDE&$script_name=fmIDE' -fmp fmp26
+
+# Open the linked file from your server instead of an already-open local file.
+# Replace fm.example.com with your FileMaker Server address.
+fmide -url 'fmp://$/MySolution?script=fmIDE' -server fm.example.com
+
+# Supply a variable to the action script carried in a link.
+fmide -url 'fmp://$/fmIDE?script=fmIDE&param=%5B%2B%5D.Exit%20Script%20%3D%20%3D%3D%20%24greeting' \
+  -frontmatter '$greeting = "Hello"'
+```
+
+You can also change the file or port, replace Name that Thing parameters, or
+replace the script parameter. See [Modify link in the command guide](docs/cli.md#4-modify-link)
+for examples and precedence rules.
+
+## Preview and results
+
+Add `--dry-run` to any of the four use cases to print the resulting URL without
+running it. Supplying `-file` also avoids querying FileMaker during preview.
+
+```sh
+fmide -file fmIDE '-$' 'layout_name=fmIDE Examples' --dry-run
+```
+
+**Exit status 0 means the URL was printed or accepted by the operating system.**
+FileMaker runs asynchronously. The CLI does not return a script result or
+confirm that an action succeeded; check FileMaker for results and dialogs.
+
+## Installation details
+
+This repository is also its own Homebrew tap; the explicit tap URL is necessary
+because its name does not start with `homebrew-`. Homebrew installation targets
+macOS. On case-sensitive filesystems, an alias provides the `fmIDE` spelling.
+Windows supports explicit-file URL dispatch; Linux supports URL previews.
+
+The CLI uses only Python's standard library: it needs **Python 3.10+**, but no
+additional Python packages from pip. With a compatible Python already installed,
+you can run `./fmide` or `python3 -m fmide_cli` from a checkout, or install it:
 
 ```sh
 python3 -m venv .venv
@@ -26,59 +137,16 @@ python3 -m venv .venv
 .venv/bin/fmide --help
 ```
 
-The CLI uses only Python's standard library: it needs **Python 3.10+**, but no
-additional Python packages from pip. With a compatible Python already installed,
-you can run `./fmide` or `python3 -m fmide_cli` from a checkout.
-
 The **Homebrew formula depends on `python@3.14`**. Homebrew may install or upgrade
 Python and its native dependencies: certificate and TLS libraries, decimal
 arithmetic, SQLite, command-line editing and compression libraries. These belong
 to the full Python runtime and its dependency chain; the CLI does not directly
 use most of their features. The exact list depends on Homebrew's Python build.
 See [Homebrew's Python formula](https://formulae.brew.sh/formula/python@3.14).
-Windows supports explicit-file URL dispatch; Linux supports URL previews.
-
-## Quick start
-
-Open your database in FileMaker. It must contain the `fmIDE` script and your
-account must have the `fmurlscript` extended privilege.
-
-```sh
-# Preview a Name that Thing URL without running it.
-fmide -file fmIDE '-$' 'layout_name=fmIDE Examples' --dry-run
-
-# Navigate to a script using FileMaker 26.
-fmide -fmp fmp26 -file fmIDE '-$' 'script_name=fmIDE'
-
-# Use the frontmost file in the selected FileMaker version (macOS).
-fmide -fmp fmp26 '-$' 'layout_name=fmIDE Examples'
-
-# Run an inline action script, or a UTF-8 file, or stdin.
-fmide -file fmIDE '[+].Go to Layout = "fmIDE Examples"'
-fmide -file fmIDE --parameter-file actions.fmJAML
-cat actions.fmJAML | fmide -file fmIDE -
-
-# Add FileMaker Let assignments as frontmatter.
-fmide -file fmIDE -frontmatter '$greeting = "Hello"' \
-  '[+].Exit Script = == $greeting'
-
-# Repair a mangled link and replace its target and variables.
-fmide -url 'https://fmp19//$/Old?script=fmIDE&$layout_name=Old' \
-  -fmp fmp26 -file fmIDE '-$' 'layout_name=fmIDE Examples'
-```
-
-Quote URLs and `$` expressions with **single quotes** in POSIX shells. The long
-alias `--variable` is equivalent to `-$`. Put `--` before an inline parameter
-beginning with `-`, including an existing `---` frontmatter block.
-
-**Exit status 0 means the operating system accepted the URL.** FileMaker runs
-asynchronously; the CLI does not return a script result or claim that the action
-succeeded. Check FileMaker for dialogs. `--dry-run` prints the complete URL and
-never opens it; specifying `-file` also avoids querying FileMaker during preview.
 
 ## Reference and development
 
-- [Options, precedence and URL repair](docs/cli.md)
+- [Show, Act, Link and Modify link: command guide and options](docs/cli.md)
 - [Tests, live verification and releases](docs/development.md)
 - [Initial verification results](docs/verification.md)
 
