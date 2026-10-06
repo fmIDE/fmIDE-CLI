@@ -18,7 +18,8 @@ class Fmide < Formula
   test do
     assert_equal "fmIDE CLI #{version}", shell_output("#{bin}/fmide --version").strip
     assert_equal "fmp://$/fmIDE?script=fmIDE", shell_output("#{bin}/fmIDE -file fmIDE --dry-run").strip
-    assert_equal "fmp26://$/My%20File?script=fmIDE&$layout_name=Hello%20World",
-                 shell_output("#{bin}/fmide -fmp fmp26 -file 'My File' --variable 'layout_name=Hello World' --dry-run").strip
+    command = "#{bin}/fmide -fmp fmp26 -file 'My File' " \
+              "--variable 'layout_name=Hello World' --dry-run"
+    assert_equal "fmp26://$/My%20File?script=fmIDE&$layout_name=Hello%20World", shell_output(command).strip
   end
 end
