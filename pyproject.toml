@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fmide-cli"
+version = "0.1.0"
+description = "Call fmIDE in FileMaker Pro from the command line"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{name = "fmIDE"}]
+
+[project.urls]
+Homepage = "https://github.com/fmIDE/fmIDE-CLI"
+Issues = "https://github.com/fmIDE/fmIDE-CLI/issues"
+
+[project.scripts]
+fmide = "fmide_cli.cli:main"
+fmIDE = "fmide_cli.cli:main"
+
+[tool.setuptools]
+packages = ["fmide_cli"]
