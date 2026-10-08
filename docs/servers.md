@@ -1,6 +1,6 @@
-# Local HTTP forwarding servers
+# Local HTTP(S) forwarding servers
 
-Run independent localhost servers that accept HTTP links and dispatch FMP URLs
+Run independent localhost servers that accept web links and dispatch FMP URLs
 through the **same URL builder and OS dispatcher as the immediate `fmide` CLI**.
 No shell command is constructed. Each server has persistent settings, its own
 background process and a rotating debug log. Management currently supports macOS
@@ -15,10 +15,13 @@ fmide server add start -tag old -fmp fmp19
 fmide server list
 ```
 
-On an empty configuration this creates servers 0 and 1, listening on ports 43103
-and 43104. Set `-file NewDatabase` or `-file OldDatabase` to enforce a database;
+On an empty configuration this creates HTTPS servers 0 and 1, listening on ports
+43103 and 43104. Each gets a private, self-signed localhost certificate on first
+start. Set `-file NewDatabase` or `-file OldDatabase` to enforce a database;
 otherwise each link supplies its database. Without `-fmp`, the incoming scheme is
 preserved (short URLs default to `fmp`, the registered FileMaker handler).
+The first HTTPS start uses the system `openssl` command to create a private
+self-signed certificate; provide `-tls-cert` and `-tls-key` to use your own.
 
 ```text
 INDEX  TAG  PORT   STATE    FMP    HOST  FILE
@@ -27,17 +30,42 @@ INDEX  TAG  PORT   STATE    FMP    HOST  FILE
 ```
 
 `—` means preserve the incoming URL's value. `status` also shows the listening
-address, target port, debug setting, settings file and log location.
+address, target port, debug setting, settings file and log location. Configurations
+created before HTTPS support retain HTTP; switch one with `fmide server ID set
+-https on`.
 
 ## Welcome page
 
-Open `http://localhost:43103/` to see a welcome message, an explanation of the
+Open `https://localhost:43103/` to see a welcome message, an explanation of the
 forwarding server, usage examples and a link to this guide. A bare `/` or `/?`
 returns HTTP 200 without dispatching to FileMaker, even with a saved database.
-Browsers requesting `text/html` receive HTML; `curl http://localhost:43103/`
+Browsers requesting `text/html` receive HTML; `curl -k https://localhost:43103/`
 receives the same guidance as plain text. The response uses the actual listening
 port. Requests containing parameters still use normal forwarding and validation;
-for example, `/?url=` remains an error.
+for example, `/?url=` remains an error. Use `-https off` for plain HTTP.
+
+### Use a certificate browsers trust
+
+The generated certificate encrypts traffic, but browsers do not trust a
+self-signed certificate automatically. For clickable links without a browser
+warning, install a local certificate authority with [mkcert](https://github.com/FiloSottile/mkcert)
+and configure its localhost certificate:
+
+```sh
+brew install mkcert
+mkcert -install
+mkdir -p "$HOME/.config/fmide/certs"
+mkcert -cert-file "$HOME/.config/fmide/certs/localhost.pem" \\
+  -key-file "$HOME/.config/fmide/certs/localhost-key.pem" localhost 127.0.0.1
+fmide server 0 set \\
+  -tls-cert "$HOME/.config/fmide/certs/localhost.pem" \\
+  -tls-key "$HOME/.config/fmide/certs/localhost-key.pem"
+```
+
+`mkcert -install` adds its local CA to the computer's trust stores. The private
+key and certificate paths are stored in fmIDE's private server settings. Keep
+the key private. Certificate changes restart a running server. The CLI pins the
+configured certificate when it connects to its own lifecycle-control endpoint.
 
 ## Send a request (0.3.0)
 
@@ -49,7 +77,7 @@ it never constructs or runs a shell command.
 ### Native fmIDE parameters
 
 ```text
-http://localhost:43103/?-file=MyFile&$layout_name=Home&$fmide_debugger=1
+https://localhost:43103/?-file=MyFile&$layout_name=Home&$fmide_debugger=1
 ```
 
 This produces `fmp://$/MyFile?script=fmIDE&$layout_name=Home&$fmide_debugger=1`
@@ -59,17 +87,17 @@ explicit `script=OtherScript` and `param=SCRIPT_PARAMETER` also work.
 A server with a saved `-file` can use the shorter form:
 
 ```text
-http://localhost:43103/?$layout_name=fmIDE%20Actions
+https://localhost:43103/?$layout_name=fmIDE%20Actions
 ```
 
 To select a script's steps, quote the range as a FileMaker calculation string:
 
 ```text
-http://localhost:43103/?-file=fmIDE&$script_name=fmIDE&$script_step_range=%221..-1%22&$fmide_debugger=0
+https://localhost:43103/?-file=fmIDE&$script_name=fmIDE&$script_step_range=%221..-1%22&$fmide_debugger=0
 ```
 
 The existing FMP query suffix can stay unchanged: replace
-`fmp://$/MyFile?script=fmIDE` with `http://localhost:43103/?-file=MyFile`.
+`fmp://$/MyFile?script=fmIDE` with `https://localhost:43103/?-file=MyFile`.
 An explicit custom `script` must be retained.
 
 ### CLI-style parameters
@@ -77,7 +105,7 @@ An explicit custom `script` must be retained.
 The equivalent variable-option form is:
 
 ```text
-http://localhost:43103/?-file=MyFile&-$=layout_name=Home&-$=fmide_debugger=1
+https://localhost:43103/?-file=MyFile&-$=layout_name=Home&-$=fmide_debugger=1
 ```
 
 An optional leading `$` in the assignment is accepted, e.g.
@@ -97,7 +125,7 @@ reserved compatibility name is `url`, an alias for `-url` from version 0.2.0.
 The original `url=` spelling remains supported.
 
 ```sh
-curl --get 'http://localhost:43103/' \
+curl -k --get 'https://localhost:43103/' \
   --data-urlencode '-url=https://fmp26//$/MyDatabase?script=fmIDE&$layout_name=Customers'
 ```
 
@@ -105,13 +133,13 @@ Encode the entire embedded URL once for the outer query: its `&` becomes `%26`
 and existing percent escapes become `%25`. For example:
 
 ```text
-http://localhost:43103/?-url=fmp%3A%2F%2F%24%2FMyDatabase
+https://localhost:43103/?-url=fmp%3A%2F%2F%24%2FMyDatabase
 ```
 
 For native parameters, encode individual values rather than the whole query:
 
 ```sh
-curl --get 'http://localhost:43103/' \
+curl -k --get 'https://localhost:43103/' \
   --data-urlencode '-file=MyDatabase' \
   --data-urlencode '$layout_name=Customers' \
   --data-urlencode '$fmide_debugger=1'
@@ -207,7 +235,10 @@ PID. An unresponsive/unverifiable worker is reported without deleting settings.
 
 | Option | Meaning |
 | --- | --- |
-| `-listen-port PORT` | Local HTTP port, initially `43103 + index`. |
+| `-listen-port PORT` | Local HTTP(S) port, initially `43103 + index`. |
+| `-https on|off` | HTTPS listener, on by default for new servers. |
+| `-tls-cert PATH` | PEM certificate chain; set with `-tls-key`. |
+| `-tls-key PATH` | PEM private key; set with `-tls-cert`. |
 | `-tag NAME` | Unique, case-sensitive display name and identifier. |
 | `-fmp PROTOCOL` | FMP protocol override, e.g. `fmp26`, `26`, or `fmp19`. |
 | `-server HOST` | FileMaker host override, including `$` or `~`. |

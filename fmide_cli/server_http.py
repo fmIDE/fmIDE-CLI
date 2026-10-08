@@ -3,15 +3,20 @@ from __future__ import annotations
 
 from html import escape
 import hmac
-from http.client import HTTPConnection, HTTPException
+from http.client import HTTPConnection, HTTPSConnection, HTTPException
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+from pathlib import Path
 import secrets
 import signal
+import shutil
+import ssl
 import socketserver
+import subprocess
+import tempfile
 import threading
 from urllib.parse import urlsplit
 
@@ -29,8 +34,26 @@ def control(runtime: dict, action: str = 'status', timeout: float = 1) -> dict:
             or not 1 <= runtime['port'] <= 65535 or not isinstance(runtime.get('token'), str)
             or not runtime['token'] or any(c in runtime['token'] for c in '\r\n')):
         raise InputError('invalid server runtime metadata')
-    connection = HTTPConnection('127.0.0.1', runtime['port'], timeout=timeout)
+    scheme = runtime.get('scheme', 'http')
+    if scheme not in ('http', 'https'):
+        raise InputError('invalid server runtime metadata')
+    fingerprint = runtime.get('cert_sha256') if scheme == 'https' else None
+    if scheme == 'https' and (not isinstance(fingerprint, str) or len(fingerprint) != 64):
+        raise InputError('invalid server runtime metadata')
+    if scheme == 'https':
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        connection = HTTPSConnection('127.0.0.1', runtime['port'], timeout=timeout, context=context)
+    else:
+        connection = HTTPConnection('127.0.0.1', runtime['port'], timeout=timeout)
     try:
+        if fingerprint:
+            import hashlib
+            connection.connect()
+            peer = connection.sock.getpeercert(binary_form=True)
+            if not hmac.compare_digest(hashlib.sha256(peer).hexdigest(), fingerprint):
+                raise InputError('server certificate changed')
         connection.request('GET' if action == 'status' else 'POST', '/_fmide/' + action,
                            headers={'Authorization': 'Bearer ' + runtime['token']})
         response = connection.getresponse()
@@ -43,6 +66,51 @@ def control(runtime: dict, action: str = 'status', timeout: float = 1) -> dict:
         return result
     finally:
         connection.close()
+
+
+def server_ssl_context(cert_file: str, key_file: str) -> ssl.SSLContext:
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.load_cert_chain(certfile=os.path.expanduser(cert_file), keyfile=os.path.expanduser(key_file))
+    return context
+
+
+def certificate_fingerprint(cert_file: str) -> str:
+    import hashlib
+    with open(os.path.expanduser(cert_file), encoding='ascii') as stream:
+        der = ssl.PEM_cert_to_DER_cert(stream.read())
+    return hashlib.sha256(der).hexdigest()
+
+
+def default_certificate(store: Store, index: str) -> tuple[str, str]:
+    """Create a private, self-signed localhost certificate for a new HTTPS listener."""
+    cert = store.root / f'{index}.localhost.pem'
+    key = store.root / f'{index}.localhost-key.pem'
+    if cert.is_file() and key.is_file():
+        return str(cert), str(key)
+    executable = shutil.which('openssl') or ('/usr/bin/openssl' if os.path.isfile('/usr/bin/openssl') else None)
+    if not executable:
+        raise InputError('HTTPS needs OpenSSL to create a local certificate; install OpenSSL or configure -tls-cert and -tls-key')
+    with tempfile.TemporaryDirectory(dir=store.root) as temporary:
+        temporary = Path(temporary)
+        temp_cert, temp_key, config = (temporary / name for name in ('cert.pem', 'key.pem', 'openssl.cnf'))
+        config.write_text(
+            '[req]\nprompt = no\ndistinguished_name = dn\nx509_extensions = v3_ext\n'
+            '[dn]\nCN = localhost\n'
+            '[v3_ext]\nsubjectAltName = DNS:localhost,IP:127.0.0.1\n',
+            encoding='ascii')
+        try:
+            subprocess.run([executable, 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+                            '-days', '825', '-keyout', str(temp_key), '-out', str(temp_cert),
+                            '-config', str(config)], check=True, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=30)
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise InputError('could not create the default HTTPS certificate; configure -tls-cert and -tls-key') from exc
+        os.chmod(temp_key, 0o600)
+        os.chmod(temp_cert, 0o600)
+        os.replace(temp_key, key)
+        os.replace(temp_cert, cert)
+    return str(cert), str(key)
 
 
 def process_locked(store: Store, index: str) -> bool:
@@ -61,7 +129,7 @@ def state(store: Store, index: str) -> tuple[str, dict | None]:
         try:
             result = control(runtime)
             return ('stopping' if result.get('stopping') else 'running'), runtime
-        except (OSError, ValueError, HTTPException):
+        except (InputError, OSError, ValueError, HTTPException):
             pass
     return ('unreachable' if process_locked(store, index) else 'stopped'), runtime
 
@@ -108,11 +176,12 @@ def handler_class(store: Store, index: str, runtime: dict, stopped: threading.Ev
             self.wfile.flush()
 
         def welcome(self):
-            address = f'http://localhost:{runtime["port"]}'
+            address = f'{runtime.get("scheme", "http")}://localhost:{runtime["port"]}'
+            transport = 'HTTPS' if runtime.get('scheme') == 'https' else 'HTTP'
             text = f"""Hello from fmIDE!
 
-You are at the local fmIDE HTTP forwarding server: {address}/
-This server accepts HTTP links and opens them in FileMaker Pro.
+You are at the local fmIDE {transport} forwarding server: {address}/
+This server accepts links and opens them in FileMaker Pro.
 Viewing this welcome page does not open FileMaker or run a script.
 
 Usage
@@ -195,7 +264,8 @@ Full documentation: https://github.com/fmIDE/fmIDE-CLI/blob/main/docs/servers.md
             if self.headers.get('Host', '') not in allowed:
                 return False
             origin = self.headers.get('Origin')
-            if origin and origin not in {'http://' + host for host in allowed}:
+            scheme = runtime.get('scheme', 'http')
+            if origin and origin not in {scheme + '://' + host for host in allowed}:
                 return False
             # Permit intentional browser link navigation, not cross-site images/fetches.
             site = self.headers.get('Sec-Fetch-Site')
@@ -276,9 +346,11 @@ class ForwardingHTTPServer(ThreadingHTTPServer):
     block_on_close = True
     request_queue_size = 16
 
-    def __init__(self, address, handler):
+    def __init__(self, address, handler, ssl_context=None):
         self.slots = threading.BoundedSemaphore(16)
         super().__init__(address, handler)
+        if ssl_context is not None:
+            self.socket = ssl_context.wrap_socket(self.socket, server_side=True)
 
     def server_bind(self):
         # HTTPServer.server_bind calls getfqdn(), which can block on reverse DNS
@@ -318,15 +390,24 @@ def worker(index: str) -> int:
         runtime = None
         try:
             config = store.read()[index]
-            runtime = {'pid': os.getpid(), 'port': config['listen_port'], 'token': secrets.token_hex(32)}
+            scheme = 'https' if config.get('https', False) else 'http'
+            runtime = {'pid': os.getpid(), 'port': config['listen_port'],
+                       'token': secrets.token_hex(32), 'scheme': scheme}
+            context = None
+            if scheme == 'https':
+                cert_file, key_file = ((config['tls_cert'], config['tls_key'])
+                                       if config.get('tls_cert') else default_certificate(store, index))
+                context = server_ssl_context(cert_file, key_file)
+                runtime['cert_sha256'] = certificate_fingerprint(cert_file)
             stopped = threading.Event()
             signal.signal(signal.SIGTERM, lambda *_: stopped.set())
             signal.signal(signal.SIGINT, lambda *_: stopped.set())
             with ForwardingHTTPServer(('127.0.0.1', runtime['port']),
-                                      handler_class(store, index, runtime, stopped, logger)) as server:
+                                      handler_class(store, index, runtime, stopped, logger),
+                                      ssl_context=context) as server:
                 server.timeout = 0.2
                 atomic_json(store.runtime(index), runtime)
-                logger.info('server %s listening on 127.0.0.1:%s', index, runtime['port'])
+                logger.info('server %s listening on %s://127.0.0.1:%s', index, scheme, runtime['port'])
                 while not stopped.is_set():
                     server.handle_request()
             logger.info('server %s stopped', index)

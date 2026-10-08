@@ -209,7 +209,7 @@ python3 -m unittest discover -v
 
 The live integration test is opt-in. The ordinary suite never opens FileMaker.
 
-## Local HTTP forwarding
+## Local HTTPS forwarding
 
 Run separately configured localhost forwarding servers for different FileMaker
 versions or databases:
@@ -218,28 +218,31 @@ versions or databases:
 fmide server add start -tag new
 fmide server add start -tag old -fmp fmp19
 fmide server list
-curl --get 'http://localhost:43103/' --data-urlencode '-file=fmIDE' --data-urlencode '$layout_name=fmIDE Actions'
+curl -k --get 'https://localhost:43103/' --data-urlencode '-file=fmIDE' --data-urlencode '$layout_name=fmIDE Actions'
 fmide server old tail
 fmide server all terminate
 ```
 
-Each server has a stable index, a unique optional tag, saved target overrides,
-and its own log. Its default HTTP port is `43103 + index`. Identify servers by
-index, tag, saved port, or `all`. See the [forwarding server guide](docs/servers.md)
-for lifecycle commands, URL encoding, configuration and logging.
+New servers use HTTPS by default and have a stable index, a unique optional tag,
+saved target overrides and their own log. The default port is `43103 + index`.
+The first start creates a self-signed localhost certificate; follow the guide to
+configure a browser-trusted certificate for warning-free links.
+Identify servers by index, tag, saved port, or `all`. See the
+[forwarding server guide](docs/servers.md) for lifecycle commands, URL encoding,
+certificates, configuration and logging.
 
 Version 0.3.0 accepts both native FMP query parameters and CLI-style options:
 
 ```text
-http://localhost:43103/?-file=MyFile&$layout_name=Home&$fmide_debugger=1
-http://localhost:43103/?-file=MyFile&-$=layout_name=Home
+https://localhost:43103/?-file=MyFile&$layout_name=Home&$fmide_debugger=1
+https://localhost:43103/?-file=MyFile&-$=layout_name=Home
 ```
 
 Use `-url` for an embedded FMP URL; the original `url` spelling remains supported.
 Saved target overrides take priority over request options. Requests do not change
 settings. After upgrading, stop and start existing workers to load the new code.
 
-The CLI dispatches HTTP inputs through the same FMP URL builder and OS dispatcher
+The CLI dispatches HTTPS inputs through the same FMP URL builder and OS dispatcher
 as immediate commands. Forwarding servers currently require macOS or Linux;
 FileMaker dispatch requires macOS. Forwarding servers are included in Homebrew version 0.2.0 and later.
 Upgrade an existing installation with `brew update && brew upgrade fmide/cli/fmide`.

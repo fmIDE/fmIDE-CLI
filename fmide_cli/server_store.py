@@ -13,7 +13,7 @@ from .urls import InputError, Options, authority, build_url, protocol
 
 BASE_PORT = 43103
 VERBS = {'add', 'set', 'unset', 'start', 'stop', 'remove', 'terminate', 'kill', 'status', 'list', 'tail'}
-FIELDS = ('fmp', 'server', 'file', 'port', 'listen_port', 'tag', 'debug')
+FIELDS = ('fmp', 'server', 'file', 'port', 'listen_port', 'tag', 'debug', 'https', 'tls_cert', 'tls_key')
 
 
 def home() -> Path:
@@ -90,7 +90,8 @@ def default_config(index: int) -> dict:
     if not 0 <= index <= 65535 - BASE_PORT:
         raise InputError(f'new index must be between 0 and {65535 - BASE_PORT}')
     return {'listen_port': BASE_PORT + index, 'tag': None, 'debug': False,
-            'fmp': None, 'server': None, 'port': None, 'file': None}
+            'fmp': None, 'server': None, 'port': None, 'file': None, 'https': True,
+            'tls_cert': None, 'tls_key': None}
 
 
 def resolve(configs: dict, identifier: str, create: bool = False) -> str:
@@ -142,6 +143,13 @@ def validate(configs: dict) -> None:
             raise InputError('target port must be between 1 and 65535')
         if type(config.get('debug', False)) is not bool:
             raise InputError('debug must be true or false')
+        if type(config.get('https', False)) is not bool:
+            raise InputError('https must be true or false')
+        if (config.get('tls_cert') is None) != (config.get('tls_key') is None):
+            raise InputError('HTTPS requires both -tls-cert and -tls-key')
+        for name in ('tls_cert', 'tls_key'):
+            if config.get(name) is not None and not isinstance(config[name], str):
+                raise InputError(f'{name.replace("_", "-")} must be a path')
         # A saved port can override an incoming URL's host without a saved host.
         build_url(Options(url='fmp://example.com/Validation', **target_options(config)))
 

@@ -261,9 +261,10 @@ credentials or other values from the supplied URL.
 - [fmIDE Name that Thing API](https://github.com/fmIDE/fmIDE/wiki/fmIDE-'Name-that-Thing'-API)
 - [Homebrew custom taps](https://docs.brew.sh/How-to-Create-and-Maintain-a-Tap)
 
-## HTTP forwarding servers
+## HTTPS forwarding servers
 
 Use `fmide server --help` or the [server guide](servers.md) for persistent
-localhost forwarders. Immediate `-server` and `-port` keep their existing target
-meanings; `server -listen-port` selects the HTTP listener. To pass the literal
+localhost forwarders. New servers use HTTPS by default; immediate `-server` and
+`-port` keep their existing target meanings, while `server -listen-port` selects
+the HTTP(S) listener. To pass the literal
 script parameter `server` to the immediate CLI, use `fmide -- server`.

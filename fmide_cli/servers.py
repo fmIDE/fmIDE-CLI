@@ -87,7 +87,8 @@ def table(store: Store, configs: dict, indices: list[str], details: bool = False
     if details:
         for index in indices:
             cfg = configs[index]
-            print(f'Server {index}: http://127.0.0.1:{cfg["listen_port"]}/')
+            scheme = 'https' if cfg.get('https', False) else 'http'
+            print(f'Server {index}: {scheme}://127.0.0.1:{cfg["listen_port"]}/')
             print(f'  Target port: {cfg.get("port") or "preserve"}; debug: {"on" if cfg.get("debug") else "off"}')
             print(f'  Log: {store.log(index)}')
         print(f'Settings: {store.path}')
@@ -144,16 +145,19 @@ def parse(argv: list[str]):
         'server': 'saved FileMaker host override (not the HTTP listener)',
         'file': 'saved database override',
         'port': 'saved FileMaker host port override',
-        'listen_port': 'local HTTP port (default: 43103 + index)',
+        'listen_port': 'local HTTP(S) port (default: 43103 + index)',
         'tag': 'unique nonnumeric name usable as an identifier',
         'debug': 'log full forwarded URLs, potentially including secrets (default: off)',
+        'https': 'HTTPS listener (default for new servers; use off for HTTP)',
+        'tls_cert': 'PEM certificate chain for an HTTPS listener (requires -tls-key)',
+        'tls_key': 'PEM private key for an HTTPS listener (requires -tls-cert)',
     }
     for field in FIELDS:
         name = field.replace('_', '-')
         kwargs = {'dest': field, 'default': None, 'help': help_text[field]}
         if unset:
             kwargs['action'] = 'store_true'
-        elif field == 'debug':
+        elif field in ('debug', 'https'):
             kwargs['choices'] = ('on', 'off')
         elif field in ('port', 'listen_port'):
             kwargs['type'] = int
@@ -176,8 +180,9 @@ def parse(argv: list[str]):
         parser.error('list takes no identifier; use status for selected servers')
     changes = {field: getattr(args, field) for field in FIELDS if getattr(args, field) is not None}
     if not unset:
-        if 'debug' in changes:
-            changes['debug'] = changes['debug'] == 'on'
+        for flag in ('debug', 'https'):
+            if flag in changes:
+                changes[flag] = changes[flag] == 'on'
         if 'fmp' in changes:
             changes['fmp'] = protocol(changes['fmp'])
     if verb == 'list' and changes:
@@ -226,7 +231,9 @@ def execute(argv: list[str]) -> int:
         restarting = []
         if changed:
             for index in indices:
-                if index in original and configs[index]['listen_port'] != original[index]['listen_port']:
+                listener_fields = ('listen_port', 'https', 'tls_cert', 'tls_key')
+                if index in original and any(configs[index].get(field) != original[index].get(field)
+                                             for field in listener_fields):
                     current = state(store, index)[0]
                     if current != 'stopped':
                         if current != 'running':

@@ -14,7 +14,7 @@ def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="fmide", allow_abbrev=False,
         description="Call fmIDE using a FileMaker URL. Omit -file to use the frontmost file on macOS.",
-        epilog="Use fmide server --help for localhost HTTP forwarding. Quote URLs, variable assignments and FileMaker calculations to protect them from your shell. "
+        epilog="Use fmide server --help for localhost HTTP(S) forwarding. Quote URLs, variable assignments and FileMaker calculations to protect them from your shell. "
                "Use -- before a script parameter starting with '-'. "
                "A successful exit means the URL was dispatched, not that the FileMaker script finished.",
     )

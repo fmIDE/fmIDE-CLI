@@ -1,11 +1,13 @@
 """Isolated server tests; never dispatch to a real FileMaker installation."""
 from contextlib import redirect_stderr, redirect_stdout
-from http.client import HTTPConnection
+from http.client import HTTPConnection, HTTPSConnection
 import io
 import json
 import os
 from pathlib import Path
 import signal
+import shutil
+import ssl
 import socket
 import subprocess
 import sys
@@ -17,7 +19,8 @@ from unittest.mock import patch
 from urllib.parse import urlencode
 
 from fmide_cli.cli import main
-from fmide_cli.server_http import ForwardingHTTPServer, control, handler_class, logger_for
+from fmide_cli.server_http import (ForwardingHTTPServer, certificate_fingerprint, control,
+                                   handler_class, logger_for, server_ssl_context)
 from fmide_cli.server_store import Store, default_config, resolve, validate
 from fmide_cli.urls import InputError
 
@@ -49,6 +52,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(self.cli('add', '-tag', 'old', '-fmp', '19')[0], 0)
         cfg = self.store.read()
         self.assertEqual(cfg['0']['listen_port'], 43103)
+        self.assertTrue(cfg['0']['https'])
         self.assertEqual(cfg['1']['listen_port'], 43104)
         self.assertEqual(cfg['1']['fmp'], 'fmp19')
         self.assertEqual(self.cli('new', 'remove')[0], 0)
@@ -82,7 +86,8 @@ class SettingsTests(unittest.TestCase):
                 self.assertEqual(self.store.path.read_bytes(), before)
         for args in [('add', '-listen-port', '43103'), ('add', '-listen-port', '65536'),
                      ('missing', 'stop'), ('0', 'set', '-fmp', 'https'),
-                     ('0', 'set', '-server', '$', '-port', '443')]:
+                     ('0', 'set', '-server', '$', '-port', '443'),
+                     ('0', 'set', '-tls-cert', 'cert.pem')]:
             self.assertEqual(self.cli(*args)[0], 1)
             self.assertEqual(self.store.path.read_bytes(), before)
         with self.assertRaises(SystemExit):
@@ -97,6 +102,10 @@ class SettingsTests(unittest.TestCase):
     def test_set_unset_preserve_and_overview(self):
         self.cli('add', '-tag', 'new', '-fmp', '26', '-file', 'New DB')
         self.cli('add', '-tag', 'old')
+        self.assertEqual(self.cli('new', 'set', '-https', 'off')[0], 0)
+        self.assertFalse(self.store.read()['0']['https'])
+        self.assertEqual(self.cli('new', 'unset', '-https')[0], 0)
+        self.assertTrue(self.store.read()['0']['https'])
         self.assertEqual(self.cli('all', 'set', '-debug', 'on')[0], 0)
         self.assertEqual(self.cli('new', 'unset', '-fmp', '-file')[0], 0)
         cfg = self.store.read()['0']
@@ -111,6 +120,15 @@ class SettingsTests(unittest.TestCase):
         self.assertIn('old', out)
         self.assertEqual(self.cli('all', 'remove')[0], 0)
         self.assertEqual(self.store.read(), {})
+
+    def test_pre_https_settings_keep_the_http_transport(self):
+        self.cli('add', '-tag', 'legacy')
+        config = self.store.read()
+        config['0'].pop('https')
+        self.store.save(config)
+        code, out, err = self.cli('legacy', 'status')
+        self.assertEqual(code, 0, err)
+        self.assertIn('Server 0: http://127.0.0.1:43103/', out)
 
     def test_empty_overview_and_bare_server(self):
         self.assertEqual(self.cli('list')[0], 0)
@@ -269,6 +287,75 @@ class HTTPTests(unittest.TestCase):
         self.assertNotIn('secret', self.store.log('0').read_text())
 
 
+@unittest.skipUnless(os.name == 'posix' and shutil.which('openssl'), 'HTTPS certificate test needs POSIX and OpenSSL')
+class HTTPSTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.cert = self.root / 'localhost.pem'
+        self.key = self.root / 'localhost-key.pem'
+        subprocess.run([
+            shutil.which('openssl'), 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+            '-keyout', str(self.key), '-out', str(self.cert), '-days', '1', '-subj', '/CN=localhost',
+            '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1',
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.store = Store(self.root / 'state')
+        self.cfg = default_config(0)
+        self.cfg.update(file='Test DB', tls_cert=str(self.cert), tls_key=str(self.key))
+        self.store.save({'0': self.cfg})
+        self.logger = logger_for(self.store, '0')
+        self.urls = []
+        self.stop_event = threading.Event()
+        self.runtime = {'port': 0, 'token': 'https-test-secret', 'scheme': 'https',
+                        'cert_sha256': certificate_fingerprint(str(self.cert))}
+        self.server = ForwardingHTTPServer(
+            ('127.0.0.1', 0), handler_class(self.store, '0', self.runtime,
+                                            self.stop_event, self.logger, self.urls.append),
+            ssl_context=server_ssl_context(str(self.cert), str(self.key)))
+        self.runtime['port'] = self.server.server_port
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join()
+        for handler in self.logger.handlers[:]:
+            handler.close()
+            self.logger.removeHandler(handler)
+
+    def request(self, path, headers=None):
+        connection = HTTPSConnection('127.0.0.1', self.runtime['port'], timeout=3,
+                                      context=ssl._create_unverified_context())
+        try:
+            connection.request('GET', path, headers=headers or {})
+            response = connection.getresponse()
+            return response.status, response.read()
+        finally:
+            connection.close()
+
+    def test_https_forwarding_welcome_origin_and_pinned_control(self):
+        status, body = self.request('/')
+        self.assertEqual(status, 200)
+        self.assertIn(b'https://localhost:', body)
+        self.assertEqual(control(self.runtime)['token'], self.runtime['token'])
+        self.assertEqual(self.request('/?-$=layout_name=Home', {
+            'Origin': f'https://127.0.0.1:{self.runtime["port"]}'} )[0], 200)
+        self.assertEqual(self.urls, ['fmp://$/Test%20DB?script=fmIDE&$layout_name=Home'])
+        self.assertEqual(self.request('/', {'Origin': f'http://127.0.0.1:{self.runtime["port"]}'})[0], 403)
+
+    def test_control_rejects_a_changed_certificate_before_sending_token(self):
+        with patch('fmide_cli.server_http.HTTPSConnection') as make_connection:
+            connection = make_connection.return_value
+            connection.sock.getpeercert.return_value = b'changed certificate'
+            runtime = dict(self.runtime, cert_sha256='0' * 64)
+            with self.assertRaises(InputError):
+                control(runtime)
+            connection.request.assert_not_called()
+            connection.close.assert_called_once()
+
+
 @unittest.skipUnless(os.name == 'posix', 'background server management requires POSIX')
 class ProcessTests(unittest.TestCase):
     def setUp(self):
@@ -300,6 +387,10 @@ class ProcessTests(unittest.TestCase):
         self.assertEqual(set(self.store.read()), {'0', '1'})
         overview = self.run_cli('list').stdout
         self.assertEqual(overview.count('running'), 2)
+        details = self.run_cli('new', 'status').stdout
+        self.assertIn('Server 0: https://127.0.0.1:', details)
+        self.assertTrue((self.store.root / '0.localhost.pem').is_file())
+        self.assertTrue((self.store.root / '0.localhost-key.pem').is_file())
         self.run_cli('all', 'remove', expected=1)
         self.assertEqual(set(self.store.read()), {'0', '1'})
         tail = subprocess.Popen([sys.executable, '-m', 'fmide_cli', 'server', 'new', 'tail'],
