@@ -229,8 +229,8 @@ for lifecycle commands, URL encoding, configuration and logging.
 
 The CLI dispatches HTTP inputs through the same FMP URL builder and OS dispatcher
 as immediate commands. Forwarding servers currently require macOS or Linux;
-FileMaker dispatch requires macOS. This feature is available from the repository
-checkout; the Homebrew v0.1.0 release predates forwarding servers.
+FileMaker dispatch requires macOS. Forwarding servers are included in Homebrew version 0.2.0 and later.
+Upgrade an existing installation with `brew update && brew upgrade fmide/cli/fmide`.
 
 ## License
 
