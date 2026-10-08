@@ -1,8 +1,8 @@
 class Fmide < Formula
   desc "Command-line access to fmIDE in FileMaker Pro"
   homepage "https://github.com/fmIDE/fmIDE-CLI"
-  url "https://github.com/fmIDE/fmIDE-CLI/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "aae0664a98f3076c9a7581270694bebf27a80378703a45ab87f21da4663b34cc"
+  url "https://github.com/fmIDE/fmIDE-CLI/archive/refs/tags/v0.2.0.tar.gz"
+  sha256 "695021df16e2c0214c121843063b0d7f78509e7667b15824fd265c2b53745bfe"
   license "MIT"
 
   depends_on :macos
@@ -16,6 +16,11 @@ class Fmide < Formula
   end
 
   test do
+    ENV["FMIDE_SERVER_HOME"] = (testpath/"servers").to_s
+    system bin/"fmide", "server", "add", "-tag", "brew-test", "-fmp", "19"
+    assert_match "brew-test", shell_output("#{bin}/fmide server list")
+    assert_match "fmp19", shell_output("#{bin}/fmide server brew-test status")
+    system bin/"fmide", "server", "all", "terminate"
     assert_equal "fmIDE CLI #{version}", shell_output("#{bin}/fmide --version").strip
     assert_equal "fmp://$/fmIDE?script=fmIDE", shell_output("#{bin}/fmIDE -file fmIDE --dry-run").strip
     command = "#{bin}/fmide -fmp fmp26 -file 'My File' " \
