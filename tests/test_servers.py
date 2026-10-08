@@ -161,6 +161,12 @@ class HTTPTests(unittest.TestCase):
     def forward(self, url, headers=None):
         return self.request('/?' + urlencode({'url': url}), headers=headers)
 
+    def test_listener_startup_does_not_depend_on_reverse_dns(self):
+        with patch('socket.getfqdn', side_effect=AssertionError('reverse DNS must not run')):
+            with ForwardingHTTPServer(('127.0.0.1', 0), self.server.RequestHandlerClass) as server:
+                self.assertEqual(server.server_name, 'localhost')
+                self.assertGreater(server.server_port, 0)
+
     def test_shared_url_builder_preserves_parameters(self):
         status, data = self.forward('https://fmp26//$/New?script=fmIDE&param=a%26b%2B%25&$x=one%20two')
         self.assertEqual(status, 200)
