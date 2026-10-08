@@ -260,3 +260,10 @@ credentials or other values from the supplied URL.
 - [Claris FMP URL format](https://help.claris.com/en/pro-help/content/opening-files-url.html)
 - [fmIDE Name that Thing API](https://github.com/fmIDE/fmIDE/wiki/fmIDE-'Name-that-Thing'-API)
 - [Homebrew custom taps](https://docs.brew.sh/How-to-Create-and-Maintain-a-Tap)
+
+## HTTP forwarding servers
+
+Use `fmide server --help` or the [server guide](servers.md) for persistent
+localhost forwarders. Immediate `-server` and `-port` keep their existing target
+meanings; `server -listen-port` selects the HTTP listener. To pass the literal
+script parameter `server` to the immediate CLI, use `fmide -- server`.
