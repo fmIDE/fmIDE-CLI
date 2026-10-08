@@ -12,7 +12,7 @@ import tempfile
 from .urls import InputError, Options, authority, build_url, protocol
 
 BASE_PORT = 43103
-VERBS = {'add', 'set', 'unset', 'start', 'stop', 'remove', 'terminate', 'kill', 'status', 'list', 'tail'}
+VERBS = {'add', 'set', 'unset', 'start', 'restart', 'stop', 'remove', 'terminate', 'kill', 'status', 'list', 'tail'}
 FIELDS = ('fmp', 'server', 'file', 'port', 'listen_port', 'tag', 'debug')
 
 

@@ -135,8 +135,8 @@ def parse(argv: list[str]):
         description='Manage localhost FMP forwarding servers. ID is an index, saved port, tag, or all.',
         epilog='Default ID: 0. Default verb: set (no settings shows status). '
                'Use add [start] to append. Default port: 43103 + index. '
-               'Verbs: add, set, unset, start, stop, remove, terminate, kill, status, list, tail. '
-               'stop keeps settings; remove requires stopped; terminate stops and removes; kill forces stop.',
+               'Verbs: add, set, unset, start, restart, stop, remove, terminate, kill, status, list, tail. '
+               'restart stops then starts with saved settings; stop keeps settings; remove requires stopped; terminate stops and removes; kill forces stop.',
     )
     parser.add_argument('words', nargs='*', metavar='[ID] [VERB]')
     help_text = {
@@ -170,7 +170,7 @@ def parse(argv: list[str]):
         if words and words[0] not in VERBS:
             identifier, words = words[0], words[1:]
         if len(words) > 1 or (words and words[0] not in VERBS - {'add'}):
-            parser.error('expected [ID] start|stop|set|unset|tail|status|list|remove|terminate|kill')
+            parser.error('expected [ID] start|restart|stop|set|unset|tail|status|list|remove|terminate|kill')
         verb = words[0] if words else 'set'
     if verb == 'list' and identifier != '0':
         parser.error('list takes no identifier; use status for selected servers')
@@ -252,6 +252,11 @@ def execute(argv: list[str]) -> int:
             try:
                 if verb == 'start':
                     start(store, index)
+                elif verb == 'restart':
+                    # A running server whose port changed was already restarted above.
+                    if index not in restarting:
+                        stop(store, index)
+                        start(store, index)
                 elif verb in ('stop', 'kill', 'terminate'):
                     stop(store, index, force=verb == 'kill')
                 if verb in ('remove', 'terminate'):

@@ -9,11 +9,12 @@ import json
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+import re
 import secrets
 import signal
 import socketserver
 import threading
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from .http_options import request_options
 from .log_summary import action_summary
@@ -109,52 +110,114 @@ def handler_class(store: Store, index: str, runtime: dict, stopped: threading.Ev
 
         def welcome(self):
             address = f'http://localhost:{runtime["port"]}'
+            config = store.read().get(str(index), {})
+            page_tag = config.get('tag') or ('default' if str(index) == '0' else 'untagged')
+            page_title = f"fmIDE Gateway #{index} '{page_tag}', port {runtime['port']}"
+            host = config.get('server')
+            host = host.rsplit('@', 1)[-1] if host else '($)'
+            headers = ['fmIDE Port', 'Server #', 'Tag', 'fmp', 'server']
+            values = [str(runtime['port']), str(index),
+                      config.get('tag') or ('(default)' if str(index) == '0' else '(none)'),
+                      config.get('fmp') or '(fmp)', host]
+            if config.get('file'):
+                headers.append('file')
+                values.append(config['file'])
+            if config.get('port'):
+                headers.append('FMP port')
+                values.append(str(config['port']))
+            # Keep terminal table cells on one line; HTML is escaped separately.
+            cells = [' '.join(value.split()).replace('|', '\u00a6') for value in values]
+            details = ('| ' + ' | '.join(headers) + ' |\n| '
+                       + ' | '.join(['---'] * len(headers)) + ' |\n| '
+                       + ' | '.join(cells) + ' |')
+            table_html = ('<table><thead><tr>'
+                          + ''.join('<th scope="col">' + escape(h) + '</th>' for h in headers)
+                          + '</tr></thead><tbody><tr>'
+                          + ''.join('<td>' + escape(v) + '</td>' for v in values)
+                          + '</tr></tbody></table>')
+            action = '[+].Show Custom Dialog.message = == $fmide_version\n[+].Exit Script = == $fmide_version'
+            output = '$fmide_on_exit_script_write_data_to_folder_path = Get ( DesktopPath ) & "fmide_api_output_temp/"'
+            action_url = address + '/?-file=MyDatabase&param=' + quote(action, safe='')
+            output_url = action_url + '&-frontmatter=' + quote(output, safe='')
             text = f"""Hello from fmIDE!
 
-You are at the local fmIDE HTTP forwarding server: {address}/
-This server accepts HTTP links and opens them in FileMaker Pro.
-Viewing this welcome page does not open FileMaker or run a script.
+Welcome to the local fmIDE Gateway: {address}/
+
+{details}
+
+This server provides direct access to fmIDE in FileMaker Pro. It accepts fmIDE API parameters and fmIDE FMP URLs, which it unmangles and opens. fmIDE-CLI forwarding parameters let you override the destination, for example by specifying a server address.
 
 Usage
-Add a database name and the action you want to perform to the URL.
-Replace MyDatabase and Home with your database and layout names:
 
-{address}/?-file=MyDatabase&$layout_name=Home
+fmIDE 'Name that Thing' API
 
-Forward an existing FMP URL (percent-encode it as the -url value):
-{address}/?-url=fmp26%3A%2F%2F%24%2FMyDatabase%3Fscript%3DfmIDE
+`{address}/?-file=MyDatabase&$layout_name=Home`
 
-Options
+Specify the target database with `-file` and the layout to show with `$layout_name`.
+Replace `MyDatabase` and `Home` with your database and layout names.
 
-fmIDE CLI forwarding parameters
-  -url: an FMP URL to (unmangle and) forward
-  -fmp: FileMaker protocol, for example fmp26
-  -server: FileMaker host
-  -port: FileMaker host port
-  -file: database name (unless configured on the server)
-  -frontmatter: a separate space to add frontmatter to the fmIDE script parameter.
-    Define variables here as FileMaker Let variable definitions,
-    or pass them as $var parameters below.
+fmIDE Action Script API (fmIDEAS)
+
+`{action_url}`
+
+Replace `MyDatabase` with your database name. This example shows the fmIDE version in a dialog, then returns it as the script result. Pass this two-line fmJAML action script as `param`:
+`{action}`
+
+To also save the result on your Desktop, add this `-frontmatter` assignment:
+`{output}`
+
+The complete URL with Desktop output is:
+`{output_url}`
+
+Read `script_result.txt` in `Desktop/fmide_api_output_temp/` after the action completes.
+
+fmIDE FMP URL forwarding
+
+`{address}/?-url=fmp26%3A%2F%2F%24%2FMyDatabase%3Fscript%3DfmIDE%26%24script_name%3DfmIDE%26%24script_step_number%3D2`
+
+Original FMP URL passed as `-url`:
+`fmp26://$/MyDatabase?script=fmIDE&$script_name=fmIDE&$script_step_number=2`
+
+Forward an existing FMP URL by passing it as `-url`. Percent-encode the URL as the parameter value.
+
+Parameters
+
+Target File
+  `-file`: target database name (unless configured on the server)
 
 fmIDE 'Name that Thing' Parameters
-  $layout_name: layout to show
-  $script_name: script to show
-  $script_step_number: script step to show
-  Other Name that Thing parameters can be passed in the same way.
+  `$layout_name`: layout to show
+  `$script_name`: script to show
+  `$script_step_number`: script step to show
+  All Name that Thing parameters: https://github.com/fmIDE/fmIDE/wiki/fmIDE-%27Name-that-Thing%27-API-Parameters
 
 fmIDE option variables
-  $fmide_debugger=1: enable the fmIDE debugger
-  Other fmIDE option variables can also be passed as $var parameters.
+  `$fmide_debugger=1` /* Enable the fmIDE debugger. */
+  `$fmide_pause_on_error=1` /* Pause when an error occurs. */
+  `$fmide_pause_on_condition=1` /* Pause when the condition calculation is true. */
+  `$fmide_pause_on_condition_calculation = "$fmide__action_number=4"` /* Pause at action number 4 when conditional pausing is enabled. */
+
+  `$fmide_debug=3` /* 0=none, 3=errors, 5=info, 7=debug */
 
 fmIDE script parameter
-  param=«fmJAML/fmIDEAS»
-  param=«JSON/fmIDEAS»
+  `param=«fmJAML/fmIDEAS»`
+  `param=«JSON/fmIDEAS»`
 
-fmIDEAS = fmIDE Action Script
+fmIDE CLI forwarding parameters
+  `-url`: an FMP URL to (unmangle and) forward
+  `-fmp`: FileMaker protocol, for example `fmp26`
+  `-server`: FileMaker host
+  `-port`: FileMaker host port
+  `-file`: target database name (unless configured on the server)
+  `-frontmatter`: a separate space to add frontmatter to the fmIDE script parameter.
+    Define variables here as FileMaker Let variable definitions,
+    or pass them as `$var` parameters.
+
+Notes
 
 Saved server settings override targets supplied in the request.
-Use %20 for spaces and %26 for ampersands in URL values; literal + stays +.
-FileMaker needs the fmIDE script and the fmurlscript extended privilege.
+Use `%20` for spaces and `%26` for ampersands in URL values; literal `+` stays `+`.
+FileMaker needs the fmIDE script and the `fmurlscript` extended privilege.
 A successful forwarding response means the OS accepted the URL;
 it does not confirm that FileMaker finished the action.
 
@@ -176,19 +239,42 @@ Full documentation: https://github.com/fmIDE/fmIDE-CLI/blob/main/docs/servers.md
                     wants_html = True
             if wants_html:
                 title, content = text.split('\n', 1)
+                content_html = escape(content.strip()).replace(escape(details), '</pre>' + table_html + '<pre>', 1)
+                content_html = content_html.replace(escape(address + '/'), '<a href="' + escape(address + '/') + '">' + escape(address + '/') + '</a>', 1)
+                wiki_url = 'https://github.com/fmIDE/fmIDE/wiki/fmIDE-%27Name-that-Thing%27-API-Parameters'
+                content_html = content_html.replace(wiki_url, '<a href="' + wiki_url + '">fmIDE Wiki — Name that Thing parameters</a>')
+                content_html = re.sub(r'`([^`]+)`', r'<code>\1</code>', content_html)
+                headings = {
+                    2: ('Usage', 'Parameters', 'Notes'),
+                    3: ("fmIDE 'Name that Thing' API", 'fmIDE Action Script API (fmIDEAS)',
+                        'fmIDE FMP URL forwarding', 'Target File', "fmIDE 'Name that Thing' Parameters",
+                        'fmIDE option variables', 'fmIDE script parameter', 'fmIDE CLI forwarding parameters'),
+                }
+                for level, labels in headings.items():
+                    for label in labels:
+                        content_html = content_html.replace('\n' + escape(label) + '\n',
+                            f'</pre><h{level}>' + escape(label) + f'</h{level}><pre>')
                 body = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
                         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-                        '<title>Hello from fmIDE</title><style>'
+                        f'<title>{escape(page_title)}</title><style>'
                         'body{max-width:900px;margin:3rem auto;padding:0 1.5rem;'
                         'font-family:system-ui,sans-serif;line-height:1.6;color:#172b3a;background:#f8fafc}'
+                        'code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.9em;background:#e8eef3;border-radius:4px;padding:.12em .3em}'
+                        'h2{font-size:1.5rem;margin:2rem 0 .75rem}h3{font-size:1.1rem;margin:1.4rem 0 .5rem}'
                         'pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}'
-                        '</style></head><body><h1>' + escape(title) + '</h1><pre>'
-                        + escape(content.strip()) + '</pre><p><a href="https://github.com/fmIDE/'
+                        'table{border-collapse:collapse;width:100%;margin:1rem 0}th,td{text-align:left;padding:.5rem .75rem;border:1px solid #cbd5e1;overflow-wrap:anywhere}'
+                        '.welcome-logo{display:block;width:300px;max-width:100%;height:auto}'
+                        '</style></head><body>'
+                        '<img class="welcome-logo" '
+                        'src="https://raw.githubusercontent.com/fmIDE/fmIDE-CLI/main/docs/fmIDE-43103.svg" '
+                        'width="600" height="225" alt="fmIDE morphing into port number 43103">'
+                        '<h1>' + escape(title) + '</h1><pre>'
+                        + content_html + '</pre><p><a href="https://github.com/fmIDE/'
                         'fmIDE-CLI/blob/main/docs/servers.md">Read the full server documentation</a>'
                         '</p></body></html>')
                 self.reply_body(200, body.encode('utf-8'), 'text/html; charset=utf-8')
             else:
-                self.reply_body(200, text.encode('utf-8'), 'text/plain; charset=utf-8')
+                self.reply_body(200, text.replace('`', '').encode('utf-8'), 'text/plain; charset=utf-8')
 
         def allowed_browser_request(self) -> bool:
             allowed = {f'127.0.0.1:{runtime["port"]}', f'localhost:{runtime["port"]}'}

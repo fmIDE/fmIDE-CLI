@@ -31,6 +31,12 @@ address, target port, debug setting, settings file and log location.
 
 ## Welcome page
 
+The fmIDE Gateway welcome page identifies the current server with its listening
+port, index, tag and saved forwarding targets. It includes code-formatted API
+examples, a link to the Name that Thing parameter reference, and an animated
+SVG loaded from the repository on GitHub (an internet connection is required
+for the image). Browsers show a gateway-specific tab title.
+
 Open `http://localhost:43103/` to see a welcome message, an explanation of the
 forwarding server, usage examples and a link to this guide. A bare `/` or `/?`
 returns HTTP 200 without dispatching to FileMaker, even with a saved database.
@@ -181,6 +187,7 @@ fmide server all stop
 | `set` | Save supplied settings; with none, show status. |
 | `unset -fmp -server …` | Clear selected overrides/settings to their defaults. |
 | `start` | Start in the background; already running is a successful no-op. |
+| `restart` | Stop gracefully, then start with saved settings; also starts a stopped server. |
 | `stop` | Gracefully stop; keep settings and logs. |
 | `kill` | Force this authenticated worker to exit; keep settings and logs. |
 | `remove` | Remove settings of stopped servers; refuse if any selected server is active. |
@@ -271,11 +278,14 @@ services and do not automatically restart after a reboot.
 ## Upgrading a running worker
 
 After upgrading the CLI with Homebrew, restart existing workers to load the new
-code. Stop and start preserves their saved settings; do not use `terminate`:
+code. `restart` preserves saved settings and logs; it accepts an index, port,
+tag or `all`. It requires an existing configuration and does not start a
+replacement if stopping fails. Do not use `terminate`:
 
 ```sh
-fmide server all stop
-fmide server all start
+fmide server all restart
+# Or restart only one server:
+fmide server 43104 restart
 ```
 
 ### Action summaries
