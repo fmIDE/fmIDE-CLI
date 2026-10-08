@@ -203,7 +203,6 @@ class HTTPTests(unittest.TestCase):
                         self.assertIn(b'fmIDE CLI forwarding parameters', body)
                         self.assertIn(b'-file=MyDatabase', body)
                         self.assertNotIn(b'test-secret', body)
-                        self.assertNotIn(b'Old DB', body)
                     finally:
                         connection.close()
         self.assertEqual(self.urls, [])
@@ -212,6 +211,27 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(self.request('/', method='POST')[0], 405)
         self.stop_event.set()
         self.assertEqual(self.request('/')[0], 503)
+
+    def test_welcome_identifies_server_and_actual_port(self):
+        for index, tag, identity in (('0', None, '(default)'),
+                                     ('0', 'fmp26', '(default) (fmp26)'),
+                                     ('1', 'old', '#1 (old)'), ('2', None, '#2')):
+            config = dict(self.cfg, tag=tag)
+            self.store.save({index: config})
+            self.server.RequestHandlerClass = handler_class(
+                self.store, index, self.runtime, self.stop_event, self.logger, self.urls.append)
+            connection = HTTPConnection('127.0.0.1', self.runtime['port'], timeout=3)
+            try:
+                connection.request('GET', '/')
+                response = connection.getresponse()
+                body = response.read().decode('utf-8')
+                self.assertEqual(response.status, 200)
+                self.assertIn(f'Gateway: http://localhost:{self.runtime["port"]}/', body)
+                self.assertIn(f'| {self.runtime["port"]} | {index} | {tag or ("(default)" if index == "0" else "(none)")} | fmp19 | fm.example.com | Old DB | 5003 |', body)
+                self.assertIn(f'http://localhost:{self.runtime["port"]}/?-file=', body)
+            finally:
+                connection.close()
+        self.assertEqual(self.urls, [])
 
     def test_normal_log_describes_forwarded_action_without_values(self):
         code, _ = self.request('/?' + urlencode({'$layout_name': 'Private Layout', '$fmide_debugger': '1'}))
@@ -377,6 +397,23 @@ class ProcessTests(unittest.TestCase):
         if expected is not None:
             self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
         return result
+
+    def test_restart_preserves_settings_and_replaces_worker(self):
+        port = free_port()
+        self.run_cli('restart', expected=1)  # No implicit configuration creation.
+        self.run_cli('add', 'start', '-tag', 'example', '-listen-port', str(port), '-fmp', '26')
+        before = self.store.path.read_bytes()
+        for identifier in ('0', str(port), 'example', 'all'):
+            old = json.loads(self.store.runtime('0').read_text())
+            self.run_cli(identifier, 'restart')
+            new = json.loads(self.store.runtime('0').read_text())
+            self.assertNotEqual(old['token'], new['token'])
+            self.assertEqual(self.store.path.read_bytes(), before)
+            self.assertEqual(control(new)['stopping'], False)
+        self.run_cli('0', 'stop')
+        self.run_cli('restart')
+        self.assertIn('running', self.run_cli('list').stdout)
+        self.assertEqual(self.store.path.read_bytes(), before)
 
     def test_multi_server_full_lifecycle_and_tail(self):
         first, second = free_port(), free_port()
