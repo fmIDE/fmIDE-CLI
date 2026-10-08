@@ -1,8 +1,8 @@
 class Fmide < Formula
   desc "Command-line access to fmIDE in FileMaker Pro"
   homepage "https://github.com/fmIDE/fmIDE-CLI"
-  url "https://github.com/fmIDE/fmIDE-CLI/archive/refs/tags/v0.3.3.tar.gz"
-  sha256 "86bd066501a620314f8a3180cb7266d06979effe52995bd62e0c23fa3aa51b2a"
+  url "https://github.com/fmIDE/fmIDE-CLI/archive/refs/tags/v0.4.1.tar.gz"
+  sha256 "c6666a735bfc822befc43f23558ad4428fe11742815e2c09ce2b6c8001db2088"
   license "MIT"
 
   depends_on :macos
@@ -10,13 +10,13 @@ class Fmide < Formula
 
   def install
     libexec.install "fmide", "fmide_cli"
-    inreplace libexec/"fmide", "#!/usr/bin/env python3", "#!#{Formula["python@3.14"].opt_bin}/python3.14"
+    inreplace libexec/"fmide", "#!/usr/bin/env python3", "#!#{formula_opt_bin("python@3.14")}/python3.14"
     bin.install_symlink libexec/"fmide"
     bin.install_symlink libexec/"fmide" => "fmIDE" unless (bin/"fmIDE").exist?
   end
 
   test do
-    system Formula["python@3.14"].opt_bin/"python3.14", "-c", <<~PYTHON
+    system formula_opt_bin("python@3.14")/"python3.14", "-c", <<~PYTHON
       import sys
       sys.path.insert(0, "#{libexec}")
       from fmide_cli.http_options import request_options
