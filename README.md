@@ -208,19 +208,29 @@ python3 -m unittest discover -v
 
 The live integration test is opt-in. The ordinary suite never opens FileMaker.
 
-## Planned: local HTTP forwarding
+## Local HTTP forwarding
 
-A planned option will start a small local Python server on `localhost:43103`.
-It will accept HTTP links and forward them as FMP URLs to the appropriate
-FileMaker client, making fmIDE links usable in documentation or clickable agent
-output. The port is a visual mnemonic:
+Run separately configured localhost forwarding servers for different FileMaker
+versions or databases:
 
-```text
-4 3 1 0 3
-f m I D E
+```sh
+fmide server add start -tag new
+fmide server add start -tag old -fmp fmp19
+fmide server list
+curl --get 'http://localhost:43103/' --data-urlencode 'url=fmp://$/fmIDE'
+fmide server old tail
+fmide server all terminate
 ```
 
-This HTTP server is not part of the current release.
+Each server has a stable index, a unique optional tag, saved target overrides,
+and its own log. Its default HTTP port is `43103 + index`. Identify servers by
+index, tag, saved port, or `all`. See the [forwarding server guide](docs/servers.md)
+for lifecycle commands, URL encoding, configuration and logging.
+
+The CLI dispatches HTTP inputs through the same FMP URL builder and OS dispatcher
+as immediate commands. Forwarding servers currently require macOS or Linux;
+FileMaker dispatch requires macOS. This feature is available from the repository
+checkout; the Homebrew v0.1.0 release predates forwarding servers.
 
 ## License
 

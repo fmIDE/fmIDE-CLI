@@ -68,3 +68,13 @@ Keep release tags immutable. A new code change needs a new version/tag/checksum.
 The formula's tests only use previews and do not require FileMaker on the build
 machine. The formula is hosted here using an explicit tap URL; a second
 `homebrew-*` repository is not required.
+
+## Forwarding server verification
+
+The ordinary suite exercises real HTTP listeners with an injected dispatcher,
+and separate background CLI processes with isolated `FMIDE_SERVER_HOME` folders.
+It covers lookup by index/tag/port, holes and reset, concurrent allocation, saved
+overrides, log redaction and tailing, authenticated control, graceful and forced
+shutdown, port conflicts, and rollback after a failed port change. These tests
+never open FileMaker. Background-process tests run on POSIX; HTTP forwarding
+and existing immediate-command tests also run on Windows.

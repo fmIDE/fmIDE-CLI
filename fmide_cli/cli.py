@@ -14,7 +14,7 @@ def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="fmide", allow_abbrev=False,
         description="Call fmIDE using a FileMaker URL. Omit -file to use the frontmost file on macOS.",
-        epilog="Quote URLs, '$' options and FileMaker calculations to protect them from your shell. "
+        epilog="Use fmide server --help for localhost HTTP forwarding. Quote URLs, '$' options and FileMaker calculations to protect them from your shell. "
                "Use -- before a script parameter starting with '-'. "
                "A successful exit means the URL was dispatched, not that the FileMaker script finished.",
     )
@@ -38,6 +38,10 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "server":
+        from .servers import main as server_main
+        return server_main(argv[1:])
     cli = parser()
     args = cli.parse_args(argv)
     if args.parameter_file is not None and args.parameter is not None:
