@@ -28,6 +28,7 @@ The examples below target the `fmIDE` demo file; replace `-file fmIDE` with your
 own database name when working in another solution.
 
 Quote URLs and `$` expressions with **single quotes** in POSIX shells.
+The `-$` option itself needs no quotes in zsh or bash; keep its assignment value quoted.
 `--variable` is a long alias for `-$`.
 
 ## 1. Show
@@ -37,13 +38,13 @@ Name a thing in your solution and let fmIDE take you to it. Pass each
 
 ```sh
 # Show a layout.
-fmide -file fmIDE '-$' 'layout_name=fmIDE Examples'
+fmide -file fmIDE -$ 'layout_name=fmIDE Examples'
 
 # Show the fmIDE script at step 5.
-fmide -file fmIDE '-$' 'script_name=fmIDE' '-$' 'script_step_number=5'
+fmide -file fmIDE -$ 'script_name=fmIDE' -$ 'script_step_number=5'
 
 # Build a Name that Thing call manually from an FMP URL.
-fmide -url 'fmp26://$/MyFile' '-$' 'script_name=Hello' '-$' 'script_step_number=4'
+fmide -url 'fmp26://$/MyFile' -$ 'script_name=Hello' -$ 'script_step_number=4'
 ```
 
 When the URL does not already have a `script` parameter, the CLI adds
@@ -165,7 +166,7 @@ Add `--dry-run` to any of the four use cases to print the resulting URL without
 running it. Supplying `-file` also avoids querying FileMaker during preview.
 
 ```sh
-fmide -file fmIDE '-$' 'layout_name=fmIDE Examples' --dry-run
+fmide -file fmIDE -$ 'layout_name=fmIDE Examples' --dry-run
 ```
 
 **Exit status 0 means the URL was printed or accepted by the operating system.**
@@ -217,7 +218,7 @@ versions or databases:
 fmide server add start -tag new
 fmide server add start -tag old -fmp fmp19
 fmide server list
-curl --get 'http://localhost:43103/' --data-urlencode 'url=fmp://$/fmIDE'
+curl --get 'http://localhost:43103/' --data-urlencode '-file=fmIDE' --data-urlencode '$layout_name=fmIDE Actions'
 fmide server old tail
 fmide server all terminate
 ```
@@ -226,6 +227,17 @@ Each server has a stable index, a unique optional tag, saved target overrides,
 and its own log. Its default HTTP port is `43103 + index`. Identify servers by
 index, tag, saved port, or `all`. See the [forwarding server guide](docs/servers.md)
 for lifecycle commands, URL encoding, configuration and logging.
+
+Version 0.3.0 accepts both native FMP query parameters and CLI-style options:
+
+```text
+http://localhost:43103/?-file=MyFile&$layout_name=Home&$fmide_debugger=1
+http://localhost:43103/?-file=MyFile&-$=layout_name=Home
+```
+
+Use `-url` for an embedded FMP URL; the original `url` spelling remains supported.
+Saved target overrides take priority over request options. Requests do not change
+settings. After upgrading, stop and start existing workers to load the new code.
 
 The CLI dispatches HTTP inputs through the same FMP URL builder and OS dispatcher
 as immediate commands. Forwarding servers currently require macOS or Linux;

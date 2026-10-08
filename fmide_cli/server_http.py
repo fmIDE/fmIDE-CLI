@@ -12,11 +12,12 @@ import secrets
 import signal
 import socketserver
 import threading
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import urlsplit
 
-from .server_store import Store, atomic_json, read_json, target_options
+from .http_options import request_options
+from .server_store import Store, atomic_json, read_json
 from .system import open_url
-from .urls import InputError, Options, build_url
+from .urls import InputError, build_url
 
 MAX_URL = 16384
 
@@ -143,7 +144,7 @@ def handler_class(store: Store, index: str, runtime: dict, stopped: threading.Ev
                     os._exit(0)  # This authenticated worker only; never signal a stored PID.
                 return
             if method != 'GET':
-                self.reply(405, {'error': 'forwarding uses GET /?url=ENCODED_FMP_URL'})
+                self.reply(405, {'error': 'forwarding uses GET /?-file=NAME&$layout_name=Home or /?-url=ENCODED_FMP_URL'})
                 return
             if stopped.is_set():
                 self.reply(503, {'error': 'server is stopping'})
@@ -152,16 +153,13 @@ def handler_class(store: Store, index: str, runtime: dict, stopped: threading.Ev
                 self.reply(414, {'error': 'forwarding URL is too long'})
                 return
             if path.path != '/':
-                self.reply(404, {'error': 'use /?url=ENCODED_FMP_URL'})
+                self.reply(404, {'error': 'use /?-file=NAME&$layout_name=Home or /?-url=ENCODED_FMP_URL'})
                 return
             try:
-                query = parse_qs(path.query, keep_blank_values=True, strict_parsing=True, max_num_fields=2, errors='strict')
-                if set(query) != {'url'} or len(query['url']) != 1 or not query['url'][0]:
-                    raise InputError('supply exactly one nonempty url query parameter')
                 config = store.read().get(index)
                 if config is None:
                     raise InputError('server configuration was removed')
-                url = build_url(Options(url=query['url'][0], **target_options(config)))
+                url = build_url(request_options(path.query, config))
             except (ValueError, OSError, UnicodeError):
                 logger.warning('forward rejected: invalid URL or configuration')
                 self.reply(400, {'error': 'invalid FMP URL or server settings; include a database name'})

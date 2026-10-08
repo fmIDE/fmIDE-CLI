@@ -4,7 +4,7 @@ Choose the command form that matches what you want to do:
 
 | Use case | Command form |
 | --- | --- |
-| **Show** a thing in your solution | `fmide -file FILE '-$' 'NAME=VALUE'` |
+| **Show** a thing in your solution | `fmide -file FILE -$ 'NAME=VALUE'` |
 | **Act** by running an fmIDEAS | `fmide -file FILE 'SCRIPT-PARAMETER'` |
 | **Link** to an existing FMP URL | `fmide -url 'URL'` |
 | **Modify link** for a different target or input | `fmide -url 'URL' [MODIFIERS]` |
@@ -12,7 +12,7 @@ Choose the command form that matches what you want to do:
 For Show and Act, the target database must contain the `fmIDE` script and allow
 URL script execution through the `fmurlscript` extended privilege. The examples
 use the `fmIDE` demo database. Quote `$` expressions and URLs with single quotes
-in POSIX shells.
+in POSIX shells. The `-$` option itself needs no quotes in zsh or bash.
 
 ## 1. Show
 
@@ -20,11 +20,11 @@ Call the fmIDE **Name that Thing API** by supplying parameters that identify
 the object you want to show. The CLI constructs the call to fmIDE for you.
 
 ```sh
-fmide -file fmIDE '-$' 'layout_name=fmIDE Examples'
-fmide -file fmIDE '-$' 'script_name=fmIDE' '-$' 'script_step_number=5'
+fmide -file fmIDE -$ 'layout_name=fmIDE Examples'
+fmide -file fmIDE -$ 'script_name=fmIDE' -$ 'script_step_number=5'
 
 # Supply Name that Thing parameters alongside a manually chosen FMP URL.
-fmide -url 'fmp26://$/MyFile' '-$' 'script_name=Hello' '-$' 'script_step_number=4'
+fmide -url 'fmp26://$/MyFile' -$ 'script_name=Hello' -$ 'script_step_number=4'
 ```
 
 If the URL has no `script` parameter, the CLI adds `?script=fmIDE`. It appends
@@ -142,7 +142,7 @@ fmide -url 'fmp://$/MySolution?script=fmIDE' -server fm.example.com
 
 # Change the target file and the thing to show.
 fmide -url 'fmp://$/OldFile?script=fmIDE&$layout_name=OldLayout' \
-  -file fmIDE '-$' 'layout_name=fmIDE Examples'
+  -file fmIDE -$ 'layout_name=fmIDE Examples'
 
 # Add frontmatter to the action script carried in a link.
 fmide -url 'fmp://$/fmIDE?script=fmIDE&param=%5B%2B%5D.Exit%20Script%20%3D%20%3D%3D%20%24greeting' \
@@ -203,7 +203,7 @@ without opening it. Specify `-file`, or use a link containing a file name,
 to preview without querying FileMaker for the frontmost database.
 
 ```sh
-fmide -file fmIDE '-$' 'layout_name=fmIDE Examples' --dry-run
+fmide -file fmIDE -$ 'layout_name=fmIDE Examples' --dry-run
 fmide -file fmIDE '[+].Go to Layout = "fmIDE Examples"' --dry-run
 fmide -url 'https://fmp26//$/fmIDE?script=fmIDE' --dry-run
 fmide -url 'fmp19://$/fmIDE?script=fmIDE' -fmp fmp26 --dry-run
