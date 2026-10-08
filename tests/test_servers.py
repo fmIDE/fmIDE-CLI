@@ -174,6 +174,16 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(self.urls, ['fmp19://fm.example.com:5003/Old%20DB?script=fmIDE&$x=one%20two&param=a%26b%2B%25'])
         self.assertNotIn('param=', self.store.log('0').read_text())
 
+    def test_native_http_parameters_and_settings_unchanged(self):
+        before = self.store.path.read_bytes()
+        status, data = self.request('/?-file=New&-fmp=26&$layout_name=Home&$fmide_debugger=1')
+        self.assertEqual(status, 200)
+        self.assertTrue(data['accepted'])
+        self.assertEqual(self.urls[-1], 'fmp19://fm.example.com:5003/Old%20DB?script=fmIDE&$layout_name=Home&$fmide_debugger=1')
+        self.assertEqual(self.store.path.read_bytes(), before)
+        self.assertEqual(self.request('/?-$=layout_name=Home&-$=$fmide_debugger=1')[0], 200)
+        self.assertEqual(self.urls[-1], self.urls[-2])
+
     def test_live_settings_and_explicit_debug(self):
         self.cfg.update(fmp='fmp26', server=None, file=None, port=None, debug=True)
         self.store.save({'0': self.cfg})
@@ -187,7 +197,7 @@ class HTTPTests(unittest.TestCase):
         self.cfg['file'] = None
         self.store.save({'0': self.cfg})
         self.assertEqual(self.forward('fmp://$/')[0], 400)
-        for path in ('/', '/?url=', '/?url=a&url=b', '/?url=a&extra=b'):
+        for path in ('/', '/?url=', '/?url=a&url=b', '/?url=a&-unsupported=b'):
             self.assertEqual(self.request(path)[0], 400)
         self.assertEqual(self.request('/favicon.ico')[0], 404)
         self.assertEqual(self.request('/?url=' + 'x' * 17000)[0], 414)

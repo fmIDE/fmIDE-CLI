@@ -136,6 +136,7 @@ class Options:
     variables: list[str] = field(default_factory=list)
     frontmatter: list[str] = field(default_factory=list)
     parameter: str | None = None
+    query_parameters: list[tuple[str, str]] = field(default_factory=list)
 
 
 def build_url(options: Options, resolve_file: Callable[[str], str] | None = None) -> str:
@@ -152,6 +153,13 @@ def build_url(options: Options, resolve_file: Callable[[str], str] | None = None
     if not file or any(c in file for c in "\r\n\x00"):
         raise InputError("a nonempty file name is required; specify -file NAME")
     items = parse_query(base.query)
+    # Explicit native FMP query fields override the base URL in request order.
+    for key, value in options.query_parameters:
+        if not key or re.search(r"[\s&=?#\x00-\x1f\x7f]", key) or key.startswith('-'):
+            raise InputError("invalid FMP query parameter name")
+        if key.startswith('$'):
+            key, value = variable(key + '=' + value)
+        replace_query(items, key, value)
     if not any(k.casefold() == "script" and v for k, v in items):
         replace_query(items, "script", "fmIDE")
     if options.parameter is not None:

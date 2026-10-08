@@ -29,56 +29,120 @@ INDEX  TAG  PORT   STATE    FMP    HOST  FILE
 `—` means preserve the incoming URL's value. `status` also shows the listening
 address, target port, debug setting, settings file and log location.
 
-## Send a link
+## Send a request (0.3.0)
 
-The request format is:
+The dash makes the scope visible: `-file`, `-fmp`, and `-url` instruct the CLI
+forwarder; `script`, `param`, and `$` variables go to FileMaker. Both styles can
+be combined in one request. The server translates them into the shared CLI core;
+it never constructs or runs a shell command.
 
-```text
-http://localhost:43103/?url=ENCODED_FMP_URL
-```
-
-Encode the **entire embedded URL** once for the outer HTTP query. In particular,
-its `&` must be encoded as `%26` and existing percent escapes as `%25`. `url` has
-no leading dash. The server decodes the outer query once, then applies the same
-FMP normalization/repair and encoding rules as `fmide -url`.
-
-A link to `fmp://$/MyDatabase`:
+### Native fmIDE parameters
 
 ```text
-http://localhost:43103/?url=fmp%3A%2F%2F%24%2FMyDatabase
+http://localhost:43103/?-file=MyFile&$layout_name=Home&$fmide_debugger=1
 ```
 
-A link showing the Customers layout:
+This produces `fmp://$/MyFile?script=fmIDE&$layout_name=Home&$fmide_debugger=1`
+when the server has no saved target overrides. `script=fmIDE` is the default;
+explicit `script=OtherScript` and `param=SCRIPT_PARAMETER` also work.
+
+A server with a saved `-file` can use the shorter form:
 
 ```text
-http://localhost:43103/?url=fmp%3A%2F%2F%24%2FMyDatabase%3Fscript%3DfmIDE%26%24layout_name%3DCustomers
+http://localhost:43103/?$layout_name=fmIDE%20Actions
 ```
 
-Have curl encode a potentially mangled link for you:
+To select a script's steps, quote the range as a FileMaker calculation string:
+
+```text
+http://localhost:43103/?-file=fmIDE&$script_name=fmIDE&$script_step_range=%221..-1%22&$fmide_debugger=0
+```
+
+The existing FMP query suffix can stay unchanged: replace
+`fmp://$/MyFile?script=fmIDE` with `http://localhost:43103/?-file=MyFile`.
+An explicit custom `script` must be retained.
+
+### CLI-style parameters
+
+The equivalent variable-option form is:
+
+```text
+http://localhost:43103/?-file=MyFile&-$=layout_name=Home&-$=fmide_debugger=1
+```
+
+An optional leading `$` in the assignment is accepted, e.g.
+`-$=$layout_name=Home`. Supported options are `-file`, `-fmp`, `-server`, `-port`,
+`-url`, `-$`, and `-frontmatter`. Their double-dash aliases work too (`--variable`
+for `-$`). `param` supplies the script parameter; the terminal CLI's positional
+script parameter does not become a new dash option.
+
+Local file input (`--parameter-file`), preview flags, and server-management
+settings/verbs are not exposed through forwarding URLs. Unsupported dash options
+are errors. Other non-dash names pass through as FMP query parameters. The one
+reserved compatibility name is `url`, an alias for `-url` from version 0.2.0.
+
+### Forward an existing or mangled URL
+
+`-url` supplies a base URL that additional request parameters can modify.
+The original `url=` spelling remains supported.
 
 ```sh
 curl --get 'http://localhost:43103/' \
-  --data-urlencode 'url=https://fmp26//$/MyDatabase?script=fmIDE&$layout_name=Customers'
+  --data-urlencode '-url=https://fmp26//$/MyDatabase?script=fmIDE&$layout_name=Customers'
 ```
 
-Send the same link to the old FileMaker client using port 43104:
+Encode the entire embedded URL once for the outer query: its `&` becomes `%26`
+and existing percent escapes become `%25`. For example:
+
+```text
+http://localhost:43103/?-url=fmp%3A%2F%2F%24%2FMyDatabase
+```
+
+For native parameters, encode individual values rather than the whole query:
 
 ```sh
-curl --get 'http://localhost:43104/' \
-  --data-urlencode 'url=fmp26://$/MyDatabase?script=fmIDE&$layout_name=Customers'
+curl --get 'http://localhost:43103/' \
+  --data-urlencode '-file=MyDatabase' \
+  --data-urlencode '$layout_name=Customers' \
+  --data-urlencode '$fmide_debugger=1'
 ```
 
-Server 1's saved `-fmp fmp19` overrides the embedded `fmp26` scheme. Other saved
-target settings likewise override the link. In JavaScript, construct the outer
-query with `new URLSearchParams({url: fmpUrl})`. Use a normal clickable link;
-cross-origin JavaScript fetches and embedded image requests are rejected.
+### Encoding and precedence
+
+Queries follow FMP percent-encoding conventions: **literal `+` remains `+`**;
+use `%20` for a space, `%26` for an ampersand in a value, and `%25` for a literal
+percent sign. Each query layer is decoded exactly once. This applies to both
+`-url` and its `url` alias. Form encoders that use `+` for spaces must be adjusted:
+in JavaScript use `new URLSearchParams(values).toString().replace(/\+/g, "%20")`,
+or encode each key/value with `encodeURIComponent`. curl's `--data-urlencode`
+already uses percent escapes for spaces.
+
+Target precedence, highest first:
+
+1. Saved server overrides.
+2. Explicit request options (`-file`, `-fmp`, `-server`, `-port`).
+3. The embedded `-url` target.
+4. Ordinary defaults (`fmp`, `$`, and `script=fmIDE`).
+
+A server configured for `fmp19` keeps that target even if a request says `-fmp=26`.
+Native request parameters replace matching embedded URL query fields. Repeated
+native fields/variables use the last value, case-insensitively; native `$x` and
+CLI `-$=x=...` participate in the same request order. Repeated `-frontmatter`
+values are combined by the CLI's existing frontmatter rules. Duplicate scalar
+CLI options, including mixed aliases such as `url` and `-url`, are rejected.
+Empty native values are allowed; target options and `-url` require a value.
+
+Requests never change saved settings. A database must come from the request,
+embedded URL or saved `-file`; HTTP requests do not query FileMaker for the
+frontmost database. All requests use `NAME=VALUE`, with at most 256 fields and
+16,384 characters in the outer request URL. Malformed percent escapes and UTF-8
+are rejected.
 
 HTTP 200 means the OS accepted the URL, **not that a FileMaker script finished**.
-The JSON response does not echo sensitive URL contents. Invalid links return 400,
-unknown paths 404, oversized forwarding URLs 414, failed OS dispatch 502, and a
-stopping worker 503. A link must contain a database unless `-file` is saved;
-HTTP requests do not query FileMaker for the frontmost database. The outer request
-URL is limited to 16,384 characters.
+The JSON response does not echo sensitive URL contents. Invalid requests return
+400, unknown paths 404, oversized forwarding URLs 414, failed OS dispatch 502,
+and a stopping worker 503. Use normal browser links; cross-origin JavaScript
+fetches and embedded image requests are rejected.
 
 ## Command grammar
 
@@ -193,3 +257,13 @@ management requests. A normal browser link navigation intentionally dispatches
 its FMP URL; only open forwarding links whose actions you intend to run.
 Background workers survive closing the starting terminal but are not login
 services and do not automatically restart after a reboot.
+
+## Upgrading a running worker
+
+After upgrading the CLI with Homebrew, restart existing workers to load the new
+code. Stop and start preserves their saved settings; do not use `terminate`:
+
+```sh
+fmide server all stop
+fmide server all start
+```
