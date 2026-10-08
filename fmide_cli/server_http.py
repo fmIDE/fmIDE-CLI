@@ -1,6 +1,7 @@
 """Loopback HTTP worker and authenticated lifecycle control."""
 from __future__ import annotations
 
+from html import escape
 import hmac
 from http.client import HTTPConnection, HTTPException
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -92,15 +93,102 @@ def handler_class(store: Store, index: str, runtime: dict, stopped: threading.Ev
 
         def reply(self, code: int, data: dict):
             body = json.dumps(data).encode('utf-8')
+            self.reply_body(code, body, 'application/json; charset=utf-8')
+
+        def reply_body(self, code: int, body: bytes, content_type: str):
             self.send_response(code)
-            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Content-Type', content_type)
             self.send_header('Content-Length', str(len(body)))
             self.send_header('Cache-Control', 'no-store')
+            self.send_header('Vary', 'Accept')
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.send_header('Connection', 'close')
             self.end_headers()
             self.wfile.write(body)
             self.wfile.flush()
+
+        def welcome(self):
+            address = f'http://localhost:{runtime["port"]}'
+            text = f"""Hello from fmIDE!
+
+You are at the local fmIDE HTTP forwarding server: {address}/
+This server accepts HTTP links and opens them in FileMaker Pro.
+Viewing this welcome page does not open FileMaker or run a script.
+
+Usage
+Add a database name and the action you want to perform to the URL.
+Replace MyDatabase and Home with your database and layout names:
+
+{address}/?-file=MyDatabase&$layout_name=Home
+
+Forward an existing FMP URL (percent-encode it as the -url value):
+{address}/?-url=fmp26%3A%2F%2F%24%2FMyDatabase%3Fscript%3DfmIDE
+
+Options
+
+fmIDE CLI forwarding parameters
+  -url: an FMP URL to (unmangle and) forward
+  -fmp: FileMaker protocol, for example fmp26
+  -server: FileMaker host
+  -port: FileMaker host port
+  -file: database name (unless configured on the server)
+  -frontmatter: a separate space to add frontmatter to the fmIDE script parameter.
+    Define variables here as FileMaker Let variable definitions,
+    or pass them as $var parameters below.
+
+fmIDE 'Name that Thing' Parameters
+  $layout_name: layout to show
+  $script_name: script to show
+  $script_step_number: script step to show
+  Other Name that Thing parameters can be passed in the same way.
+
+fmIDE option variables
+  $fmide_debugger=1: enable the fmIDE debugger
+  Other fmIDE option variables can also be passed as $var parameters.
+
+fmIDE script parameter
+  param=«fmJAML/fmIDEAS»
+  param=«JSON/fmIDEAS»
+
+fmIDEAS = fmIDE Action Script
+
+Saved server settings override targets supplied in the request.
+Use %20 for spaces and %26 for ampersands in URL values; literal + stays +.
+FileMaker needs the fmIDE script and the fmurlscript extended privilege.
+A successful forwarding response means the OS accepted the URL;
+it does not confirm that FileMaker finished the action.
+
+Full documentation: https://github.com/fmIDE/fmIDE-CLI/blob/main/docs/servers.md
+"""
+            # Browsers normally request HTML; curl's */* gets readable text.
+            wants_html = False
+            for item in self.headers.get('Accept', '').split(','):
+                media, *parameters = item.strip().lower().split(';')
+                quality = 1.0
+                for parameter in parameters:
+                    key, separator, value = parameter.strip().partition('=')
+                    if key == 'q' and separator:
+                        try:
+                            quality = float(value)
+                        except ValueError:
+                            quality = 0.0
+                if media == 'text/html' and 0 < quality <= 1:
+                    wants_html = True
+            if wants_html:
+                title, content = text.split('\n', 1)
+                body = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
+                        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+                        '<title>Hello from fmIDE</title><style>'
+                        'body{max-width:900px;margin:3rem auto;padding:0 1.5rem;'
+                        'font-family:system-ui,sans-serif;line-height:1.6;color:#172b3a;background:#f8fafc}'
+                        'pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}'
+                        '</style></head><body><h1>' + escape(title) + '</h1><pre>'
+                        + escape(content.strip()) + '</pre><p><a href="https://github.com/fmIDE/'
+                        'fmIDE-CLI/blob/main/docs/servers.md">Read the full server documentation</a>'
+                        '</p></body></html>')
+                self.reply_body(200, body.encode('utf-8'), 'text/html; charset=utf-8')
+            else:
+                self.reply_body(200, text.encode('utf-8'), 'text/plain; charset=utf-8')
 
         def allowed_browser_request(self) -> bool:
             allowed = {f'127.0.0.1:{runtime["port"]}', f'localhost:{runtime["port"]}'}
@@ -155,6 +243,9 @@ def handler_class(store: Store, index: str, runtime: dict, stopped: threading.Ev
                 return
             if path.path != '/':
                 self.reply(404, {'error': 'use /?-file=NAME&$layout_name=Home or /?-url=ENCODED_FMP_URL'})
+                return
+            if not path.query:
+                self.welcome()
                 return
             try:
                 config = store.read().get(index)

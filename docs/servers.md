@@ -29,6 +29,16 @@ INDEX  TAG  PORT   STATE    FMP    HOST  FILE
 `—` means preserve the incoming URL's value. `status` also shows the listening
 address, target port, debug setting, settings file and log location.
 
+## Welcome page
+
+Open `http://localhost:43103/` to see a welcome message, an explanation of the
+forwarding server, usage examples and a link to this guide. A bare `/` or `/?`
+returns HTTP 200 without dispatching to FileMaker, even with a saved database.
+Browsers requesting `text/html` receive HTML; `curl http://localhost:43103/`
+receives the same guidance as plain text. The response uses the actual listening
+port. Requests containing parameters still use normal forwarding and validation;
+for example, `/?url=` remains an error.
+
 ## Send a request (0.3.0)
 
 The dash makes the scope visible: `-file`, `-fmp`, and `-url` instruct the CLI

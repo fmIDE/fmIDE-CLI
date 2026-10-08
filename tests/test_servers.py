@@ -161,6 +161,40 @@ class HTTPTests(unittest.TestCase):
     def forward(self, url, headers=None):
         return self.request('/?' + urlencode({'url': url}), headers=headers)
 
+    def test_welcome_for_browser_and_curl_never_dispatches(self):
+        for file in ('Old DB', None):
+            self.cfg['file'] = file
+            self.store.save({'0': self.cfg})
+            for path, accept, content_type in (
+                    ('/', 'text/html,application/xhtml+xml,*/*;q=0.8', 'text/html'),
+                    ('/?', '*/*', 'text/plain'),
+                    ('/', '', 'text/plain'),
+                    ('/', 'text/html;q=0', 'text/plain')):
+                with self.subTest(file=file, path=path, accept=accept):
+                    connection = HTTPConnection('127.0.0.1', self.runtime['port'], timeout=3)
+                    try:
+                        connection.request('GET', path, headers={'Accept': accept})
+                        response = connection.getresponse()
+                        body = response.read()
+                        self.assertEqual(response.status, 200)
+                        self.assertIn(content_type, response.getheader('Content-Type'))
+                        self.assertEqual(int(response.getheader('Content-Length')), len(body))
+                        self.assertEqual(response.getheader('Vary'), 'Accept')
+                        self.assertIn(b'Hello from fmIDE!', body)
+                        self.assertIn(str(self.runtime['port']).encode(), body)
+                        self.assertIn(b'fmIDE CLI forwarding parameters', body)
+                        self.assertIn(b'-file=MyDatabase', body)
+                        self.assertNotIn(b'test-secret', body)
+                        self.assertNotIn(b'Old DB', body)
+                    finally:
+                        connection.close()
+        self.assertEqual(self.urls, [])
+        self.assertNotIn('forward rejected', self.store.log('0').read_text())
+        self.assertEqual(self.request('/', headers={'Host': 'evil.example'})[0], 403)
+        self.assertEqual(self.request('/', method='POST')[0], 405)
+        self.stop_event.set()
+        self.assertEqual(self.request('/')[0], 503)
+
     def test_normal_log_describes_forwarded_action_without_values(self):
         code, _ = self.request('/?' + urlencode({'$layout_name': 'Private Layout', '$fmide_debugger': '1'}))
         self.assertEqual(code, 200)
@@ -206,7 +240,7 @@ class HTTPTests(unittest.TestCase):
         self.cfg['file'] = None
         self.store.save({'0': self.cfg})
         self.assertEqual(self.forward('fmp://$/')[0], 400)
-        for path in ('/', '/?url=', '/?url=a&url=b', '/?url=a&-unsupported=b'):
+        for path in ('/?url=', '/?url=a&url=b', '/?url=a&-unsupported=b'):
             self.assertEqual(self.request(path)[0], 400)
         self.assertEqual(self.request('/favicon.ico')[0], 404)
         self.assertEqual(self.request('/?url=' + 'x' * 17000)[0], 414)
