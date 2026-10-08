@@ -1,8 +1,8 @@
 class Fmide < Formula
   desc "Command-line access to fmIDE in FileMaker Pro"
   homepage "https://github.com/fmIDE/fmIDE-CLI"
-  url "https://github.com/fmIDE/fmIDE-CLI/archive/refs/tags/v0.2.0.tar.gz"
-  sha256 "695021df16e2c0214c121843063b0d7f78509e7667b15824fd265c2b53745bfe"
+  url "https://github.com/fmIDE/fmIDE-CLI/archive/refs/tags/v0.3.0.tar.gz"
+  sha256 "f7be985b0ce0b0fc69f33887c511f800d8a7d5134384ea42179d79318e053912"
   license "MIT"
 
   depends_on :macos
@@ -16,6 +16,15 @@ class Fmide < Formula
   end
 
   test do
+    system Formula["python@3.14"].opt_bin/"python3.14", "-c", <<~PYTHON
+      import sys
+      sys.path.insert(0, "#{libexec}")
+      from fmide_cli.http_options import request_options
+      from fmide_cli.urls import build_url
+      expected = "fmp://$/MyFile?script=fmIDE&$layout_name=Home"
+      assert build_url(request_options("-file=MyFile&$layout_name=Home")) == expected
+      assert build_url(request_options("-file=MyFile&-$=layout_name=Home")) == expected
+    PYTHON
     ENV["FMIDE_SERVER_HOME"] = (testpath/"servers").to_s
     system bin/"fmide", "server", "add", "-tag", "brew-test", "-fmp", "19"
     assert_match "brew-test", shell_output("#{bin}/fmide server list")
