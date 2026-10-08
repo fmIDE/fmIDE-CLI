@@ -161,6 +161,15 @@ class HTTPTests(unittest.TestCase):
     def forward(self, url, headers=None):
         return self.request('/?' + urlencode({'url': url}), headers=headers)
 
+    def test_normal_log_describes_forwarded_action_without_values(self):
+        code, _ = self.request('/?' + urlencode({'$layout_name': 'Private Layout', '$fmide_debugger': '1'}))
+        self.assertEqual(code, 200)
+        log = self.store.log('0').read_text()
+        self.assertIn('"things": ["$layout_name"]', log)
+        self.assertIn('"$fmide_debugger": "1"', log)
+        self.assertNotIn('Private Layout', log)
+        self.assertNotIn('Old DB', log)
+
     def test_listener_startup_does_not_depend_on_reverse_dns(self):
         with patch('socket.getfqdn', side_effect=AssertionError('reverse DNS must not run')):
             with ForwardingHTTPServer(('127.0.0.1', 0), self.server.RequestHandlerClass) as server:

@@ -15,6 +15,7 @@ import threading
 from urllib.parse import urlsplit
 
 from .http_options import request_options
+from .log_summary import action_summary
 from .server_store import Store, atomic_json, read_json
 from .system import open_url
 from .urls import InputError, build_url
@@ -167,13 +168,14 @@ def handler_class(store: Store, index: str, runtime: dict, stopped: threading.Ev
             if config.get('debug'):
                 # JSON escaping prevents injected newlines/control characters in logs.
                 logger.debug('forward URL %s', json.dumps(url, ensure_ascii=True))
+            summary = action_summary(url)
             try:
                 dispatch(url)
             except (InputError, OSError):
-                logger.error('dispatch failed: check FileMaker URL handler')
+                logger.error('dispatch failed: check FileMaker URL handler; %s', summary)
                 self.reply(502, {'error': 'could not dispatch to FileMaker; check the selected URL handler'})
                 return
-            logger.info('forward accepted by operating system')
+            logger.info('forward accepted by operating system; %s', summary)
             self.reply(200, {'accepted': True, 'message': 'OS accepted the URL; FileMaker execution is asynchronous'})
     return Handler
 

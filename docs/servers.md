@@ -267,3 +267,27 @@ code. Stop and start preserves their saved settings; do not use `terminate`:
 fmide server all stop
 fmide server all start
 ```
+
+### Action summaries
+
+Normal logs describe each accepted forwarding request (and dispatch failures):
+
+```text
+INFO forward accepted by operating system; {"things": ["$layout_name"], "options": {"$fmide_debugger": "1"}}
+INFO forward accepted by operating system; {"fmJAML": "[1].action_name"}
+INFO forward accepted by operating system; {"parameter": "JSON", "action": "Go to Layout"}
+```
+
+Non-empty Name that Thing selectors are listed by name, including name, number,
+ID and UUID selectors, script ranges and searches. Their values are omitted.
+`$fmide_debugger` and `$fmide_debug` include literal `0`, `1`, `true` or `false`;
+calculations are shown as `<expression>` and are never evaluated.
+
+For `param`, fmJAML shows the first non-comment line up to (excluding) `=`,
+skipping frontmatter. JSON shows the first `action_name`, including within
+`action`, `actions` or an array, or the first command key in an action array; top-level Name that Thing selectors are also
+summarized. Unknown payloads show only their type. Command labels are limited
+to 120 characters and escaped onto one log line. Labels and fmJAML paths can
+contain names supplied by the caller; argument values, database names, hosts,
+credentials, frontmatter and unknown variables are omitted. Full URLs still
+require `-debug on`. Summaries describe requests, not FileMaker completion.
