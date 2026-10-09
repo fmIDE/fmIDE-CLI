@@ -5,6 +5,7 @@ import argparse
 from collections import deque
 from http.client import HTTPException
 import copy
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -76,9 +77,9 @@ def table(store: Store, configs: dict, indices: list[str], details: bool = False
         cfg = configs[index]
         # Do not expose credentials embedded in a saved FMP authority.
         host = cfg.get('server')
-        host = host.rsplit('@', 1)[-1] if host else '—'
+        host = host.rsplit('@', 1)[-1] if host else '($)'
         rows.append([index, cfg.get('tag') or '—', str(cfg['listen_port']), state(store, index)[0],
-                     cfg.get('fmp') or '—', host, cfg.get('file') or '—'])
+                     cfg.get('fmp') or '(fmp)', host, cfg.get('file') or '—'])
     widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]
     for row in rows:
         print('  '.join(value.ljust(width) for value, width in zip(row, widths)).rstrip())
@@ -136,7 +137,7 @@ def parse(argv: list[str]):
         description='Manage localhost FMP forwarding servers. ID is an index, saved port, tag, or all.',
         epilog='Default ID: 0. Default verb: set (no settings shows status). '
                'Use add [start] to append. Default port: 43103 + index. '
-               'Verbs: add, set, unset, start, restart, stop, remove, terminate, kill, status, list, tail. '
+               'Verbs: add, set, unset, start, restart, stop, remove, terminate, kill, status, list, get, tail. '
                'restart stops then starts with saved settings; stop keeps settings; remove requires stopped; terminate stops and removes; kill forces stop.',
     )
     parser.add_argument('words', nargs='*', metavar='[ID] [VERB]')
@@ -164,17 +165,28 @@ def parse(argv: list[str]):
         parser.add_argument('-' + name, '--' + name, **kwargs)
     args = parser.parse_intermixed_args(argv)
     words = args.words
+    get_parameter = None
     adding = bool(words and words[0] == 'add')
     if adding:
         if len(words) > 2 or (len(words) == 2 and words[1] not in ('start', 'set')):
             parser.error('use add [start|set] [OPTIONS]; add has no identifier')
         identifier, verb = None, words[1] if len(words) == 2 else 'set'
+    elif words and words[0] == 'get':
+        if len(words) > 2:
+            parser.error('get accepts at most one parameter: get [PARAMETER]')
+        identifier, verb = '0', 'get'
+        get_parameter = words[1] if len(words) == 2 else None
+    elif len(words) >= 2 and words[1] == 'get':
+        if len(words) > 3:
+            parser.error('get accepts at most one parameter: ID get [PARAMETER]')
+        identifier, verb = words[0], 'get'
+        get_parameter = words[2] if len(words) == 3 else None
     else:
         identifier = '0'
         if words and words[0] not in VERBS:
             identifier, words = words[0], words[1:]
         if len(words) > 1 or (words and words[0] not in VERBS - {'add'}):
-            parser.error('expected [ID] start|restart|stop|set|unset|tail|status|list|remove|terminate|kill')
+            parser.error('expected [ID] start|restart|stop|set|unset|tail|status|list|get|remove|terminate|kill')
         verb = words[0] if words else 'set'
     if verb == 'list' and identifier != '0':
         parser.error('list takes no identifier; use status for selected servers')
@@ -187,13 +199,43 @@ def parse(argv: list[str]):
             changes['fmp'] = protocol(changes['fmp'])
     if verb == 'list' and changes:
         parser.error('list takes no settings')
+    if verb == 'get' and changes:
+        parser.error('get takes no settings')
     if verb == 'unset' and not changes:
         parser.error('unset requires settings to clear, e.g. unset -fmp -server')
-    return identifier, verb, adding, changes
+    return identifier, verb, adding, changes, get_parameter
+
+
+def setup_info(store: Store, index: str, config: dict) -> dict:
+    normalized = default_config(int(index))
+    normalized.update(config)
+    # Old configurations predate the HTTPS default and must remain HTTP.
+    if 'https' not in config:
+        normalized['https'] = False
+    server = normalized.get('server')
+    if server:
+        normalized['server'] = server.rsplit('@', 1)[-1]
+    scheme = 'https' if normalized.get('https') else 'http'
+    return {
+        'index': index,
+        'state': state(store, index)[0],
+        'listen_url': f'{scheme}://localhost:{normalized["listen_port"]}/',
+        **normalized,
+    }
+
+
+def get_value(setup: dict, parameter: str):
+    name = parameter.replace('-', '_')
+    if name == 'id':
+        name = 'index'
+    if name not in setup:
+        allowed = ', '.join(sorted(setup))
+        raise InputError(f'unknown setup parameter {parameter!r}; choose one of: {allowed}')
+    return setup[name]
 
 
 def execute(argv: list[str]) -> int:
-    identifier, verb, adding, changes = parse(argv)
+    identifier, verb, adding, changes, get_parameter = parse(argv)
     if os.name != 'posix':
         raise InputError('forwarding servers currently require macOS or Linux; immediate CLI commands are unchanged')
     store = Store()
@@ -215,6 +257,19 @@ def execute(argv: list[str]) -> int:
             indices = [index]
         if not indices and changes:
             raise InputError('no servers to configure; use server add')
+        if verb == 'get':
+            setups = {index: setup_info(store, index, configs[index]) for index in indices}
+            if get_parameter is None:
+                result = setups if identifier == 'all' else setups[indices[0]]
+            elif identifier == 'all':
+                result = {index: get_value(info, get_parameter) for index, info in setups.items()}
+            else:
+                result = get_value(setups[indices[0]], get_parameter)
+            if get_parameter is not None and identifier != 'all':
+                print(result if isinstance(result, str) else json.dumps(result, ensure_ascii=False))
+            else:
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
         for index in indices:
             if verb == 'unset':
                 defaults = default_config(int(index))

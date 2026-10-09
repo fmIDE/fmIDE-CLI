@@ -25,12 +25,15 @@ self-signed certificate; provide `-tls-cert` and `-tls-key` to use your own.
 
 ```text
 INDEX  TAG  PORT   STATE    FMP    HOST  FILE
-0      new  43103  running  —      —     —
-1      old  43104  running  fmp19  —     —
+0      new  43103  running  (fmp)  ($)   —
+1      old  43104  running  fmp19  ($)   —
 ```
 
-`—` means preserve the incoming URL's value. `status` also shows the listening
-address, target port, debug setting, settings file and log location. Configurations
+Parentheses mark the default FMP protocol or host used when the incoming link
+does not specify one; an explicitly configured override appears without
+parentheses. `—` means no saved value for the other optional fields. `status`
+also shows the listening address, target port, debug
+setting, settings file and log location. Configurations
 created before HTTPS support retain HTTP; switch one with `fmide server ID set
 -https on`.
 
@@ -192,6 +195,7 @@ fetches and embedded image requests are rejected.
 
 ```text
 fmide server [ID] [VERB] [OPTIONS]
+fmide server [ID] get [PARAMETER]
 fmide server add [start|set] [OPTIONS]
 fmide server list
 ```
@@ -207,6 +211,8 @@ fmide server new stop
 fmide server 1 start
 fmide server 43104 status
 fmide server all stop
+fmide server new get
+fmide server new get fmp
 ```
 
 | Verb | Behavior |
@@ -222,7 +228,26 @@ fmide server all stop
 | `terminate` | Gracefully stop, then remove settings; retain settings if stopping fails. |
 | `status` | Show selected servers and their details. |
 | `list` | Show all configurations in one table, including stopped servers. |
+| `get [PARAMETER]` | Return setup as JSON, or one setting as a JSON value. `all` returns an object keyed by server index. |
 | `tail` | Show the last 20 log lines per selected server, then follow new lines and rotations. |
+
+`get` is read-only. With no parameter it returns the selected server's settings
+as JSON, including its index, running state and listening URL. A parameter name
+prints only that value; string values are unquoted text, while null, Boolean and
+numeric values use their JSON literals. Setting names accept hyphens or
+underscores (for example `listen-port` or `listen_port`); `id` aliases `index`.
+`all get` returns all setups in an object keyed by server index; `all get fmp`
+returns a JSON object of each server's FMP setting. Unset target overrides are
+`null`. The `server` value has embedded credentials removed before output.
+
+```sh
+# Full setup for the default server (index 0).
+fmide server get
+
+# A single JSON string value, or all configured servers' values.
+fmide server new get fmp
+fmide server all get listen-url
+```
 
 Ctrl-C ends `tail` without stopping servers. `all` selects the currently configured
 servers, so no shell quoting is needed:

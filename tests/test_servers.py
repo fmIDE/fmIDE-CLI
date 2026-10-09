@@ -135,6 +135,51 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(self.cli()[0], 0)
         self.assertEqual(self.store.read(), {})
 
+    def test_list_shows_default_fmp_and_host_in_parentheses(self):
+        self.cli('add')
+        code, out, err = self.cli('list')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out.splitlines()[1].split(),
+                         ['0', '—', '43103', 'stopped', '(fmp)', '($)', '—'])
+
+    def test_get_returns_setup_json_or_one_parameter_without_mutation(self):
+        self.cli('add', '-tag', 'new', '-fmp', '26', '-server', 'user:secret@fm.example.com', '-file', 'New DB')
+        before = self.store.path.read_bytes()
+
+        code, out, err = self.cli('new', 'get')
+        self.assertEqual(code, 0, err)
+        setup = json.loads(out)
+        self.assertEqual(setup['index'], '0')
+        self.assertEqual(setup['tag'], 'new')
+        self.assertEqual(setup['fmp'], 'fmp26')
+        self.assertEqual(setup['server'], 'fm.example.com')
+        self.assertEqual(setup['file'], 'New DB')
+        self.assertEqual(setup['listen_url'], 'https://localhost:43103/')
+        self.assertEqual(setup['state'], 'stopped')
+        self.assertNotIn('secret', out)
+
+        code, out, err = self.cli('new', 'get', 'fmp')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out, 'fmp26\n')
+        code, out, err = self.cli('new', 'get', 'listen-port')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out, '43103\n')
+        code, out, err = self.cli('all', 'get', 'tag')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(json.loads(out), {'0': 'new'})
+        self.assertEqual(self.store.path.read_bytes(), before)
+
+    def test_get_default_values_and_invalid_parameters(self):
+        self.cli('add')
+        code, out, err = self.cli('get', 'server')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out, 'null\n')
+        self.assertEqual(self.cli('get', 'missing')[0], 1)
+        for args in (('get', 'fmp', 'server'), ('get', '-tag', 'new')):
+            with self.subTest(args=args), self.assertRaises(SystemExit) as error:
+                self.cli(*args)
+            self.assertEqual(error.exception.code, 2)
+
     def test_corrupt_settings_are_not_overwritten(self):
         self.store.path.write_text('{broken')
         self.assertEqual(self.cli('add')[0], 1)
