@@ -1,8 +1,8 @@
 class Fmide < Formula
   desc "Command-line access to fmIDE in FileMaker Pro"
   homepage "https://github.com/fmIDE/fmIDE-CLI"
-  url "https://github.com/fmIDE/fmIDE-CLI/archive/refs/tags/v0.4.4.tar.gz"
-  sha256 "87e929b2e0ad8fb60b99433408c68dd2c416a67ba8838c8d34704fc66122472f"
+  url "https://github.com/fmIDE/fmIDE-CLI/archive/refs/tags/v0.4.5.tar.gz"
+  sha256 "dd183b1d98438732e0954d9f2325bd341ede971eb314f7f5e7dbf607bd54f4c7"
   license "MIT"
 
   depends_on :macos
