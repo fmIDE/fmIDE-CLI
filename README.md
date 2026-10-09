@@ -20,6 +20,10 @@ Both `fmide` and `fmIDE` work. FileMaker Pro and the fmIDE script are installed
 separately. See [installation details](#installation-details) for Python
 requirements and alternatives to Homebrew.
 
+To upgrade the Homebrew installation later, run `fmide brew upgrade`. This
+delegates to `brew upgrade fmide/cli/fmide` and leaves Homebrew in charge of
+the installed files.
+
 ## Before you start
 
 For **Show** and **Act**, open your database in FileMaker. It must contain the

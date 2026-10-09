@@ -86,6 +86,32 @@ class CLITests(unittest.TestCase):
                 self.assertEqual(out, "")
                 self.assertIn("specify -file NAME or include it in -url", err)
 
+    @patch("fmide_cli.cli.shutil.which", return_value="/opt/homebrew/bin/brew")
+    @patch("fmide_cli.cli.subprocess.run", return_value=subprocess.CompletedProcess([], 0))
+    def test_brew_upgrade_targets_the_fmide_formula(self, run, _):
+        code, out, err = self.run_cli(["brew", "upgrade"])
+        self.assertEqual(code, 0)
+        self.assertIn("brew upgrade fmide/cli/fmide", out)
+        self.assertIn("fmide --version", out)
+        self.assertEqual(err, "")
+        run.assert_called_once_with(
+            ["/opt/homebrew/bin/brew", "upgrade", "fmide/cli/fmide"], check=False)
+
+    @patch("fmide_cli.cli.shutil.which", return_value=None)
+    @patch("fmide_cli.cli.subprocess.run")
+    def test_brew_upgrade_reports_missing_homebrew(self, run, _):
+        code, out, err = self.run_cli(["brew", "upgrade"])
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+        self.assertIn("not found on PATH", err)
+        run.assert_not_called()
+
+    def test_brew_rejects_unknown_subcommands(self):
+        code, out, err = self.run_cli(["brew", "install"])
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertIn("usage: fmide brew upgrade", err)
+
     @patch("fmide_cli.cli.open_url", side_effect=InputError("launch failed"))
     def test_launch_failure(self, _):
         code, out, err = self.run_cli(["-file", "fmIDE"])

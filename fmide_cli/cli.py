@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 
 from . import __version__
@@ -14,7 +16,7 @@ def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="fmide", allow_abbrev=False,
         description="Call fmIDE using a FileMaker URL. Specify the target database with -file or in -url.",
-        epilog="Use fmide server --help for localhost HTTP(S) forwarding. Quote URLs, variable assignments and FileMaker calculations to protect them from your shell. "
+        epilog="Use fmide server --help for localhost HTTP(S) forwarding, and fmide brew upgrade to update the Homebrew installation. Quote URLs, variable assignments and FileMaker calculations to protect them from your shell. "
                "Use -- before a script parameter starting with '-'. "
                "A successful exit means the URL was dispatched, not that the FileMaker script finished.",
     )
@@ -37,11 +39,35 @@ def parser() -> argparse.ArgumentParser:
     return result
 
 
+def brew_upgrade() -> int:
+    executable = shutil.which('brew')
+    if executable is None:
+        print("fmide brew upgrade: Homebrew's 'brew' command was not found on PATH.", file=sys.stderr)
+        return 1
+    print('fmide: running brew upgrade fmide/cli/fmide')
+    try:
+        result = subprocess.run([executable, 'upgrade', 'fmide/cli/fmide'], check=False)
+    except OSError as exc:
+        print(f'fmide brew upgrade: could not run Homebrew: {exc}', file=sys.stderr)
+        return 1
+    if result.returncode == 0:
+        print('fmide: Homebrew upgrade finished; check the installed version with fmide --version.')
+    return result.returncode
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "server":
         from .servers import main as server_main
         return server_main(argv[1:])
+    if argv and argv[0] == 'brew':
+        if argv[1:] == ['--help'] or not argv[1:]:
+            print('usage: fmide brew upgrade\n\nUpgrade the fmIDE CLI installed by Homebrew.')
+            return 0
+        if argv[1:] == ['upgrade']:
+            return brew_upgrade()
+        print('usage: fmide brew upgrade', file=sys.stderr)
+        return 2
     cli = parser()
     if not argv:
         cli.print_help()

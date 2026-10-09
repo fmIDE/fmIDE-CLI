@@ -239,6 +239,12 @@ The positional script parameter appears at most once; options can precede it.
 - `2`: command-line syntax error.
 - `130`: interrupted.
 
+## Upgrade the Homebrew installation
+
+Run `fmide brew upgrade` to upgrade the `fmide/cli/fmide` Homebrew formula.
+The command delegates to Homebrew and returns its exit status. It does not
+update installations made from a Python package or source checkout.
+
 The command sends the URL once and does not retry. FileMaker privilege checks,
 login, unsaved script dialogs, script errors and URL/payload size limits remain
 FileMaker/OS responsibilities. A parameter file changes how text is read; it does
