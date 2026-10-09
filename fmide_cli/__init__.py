@@ -1,3 +1,3 @@
 """Command-line access to fmIDE's FileMaker URL APIs."""
 
-__version__ = "0.4.4"
+__version__ = "0.4.5"

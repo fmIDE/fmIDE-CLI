@@ -24,6 +24,12 @@ To upgrade the Homebrew installation later, run `fmide brew upgrade`. This
 delegates to `brew upgrade fmide/cli/fmide` and leaves Homebrew in charge of
 the installed files.
 
+Run `fmide update` for the guided update path. A Homebrew-installed copy runs
+that same Homebrew upgrade. Other installations check the latest stable GitHub
+release and print upgrade guidance; the command does not modify a Python
+environment or run a downloaded installer. Upgrade a pip or source installation
+using the same environment and method used to install it.
+
 ## Before you start
 
 For **Show** and **Act**, open your database in FileMaker. It must contain the

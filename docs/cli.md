@@ -245,6 +245,15 @@ Run `fmide brew upgrade` to upgrade the `fmide/cli/fmide` Homebrew formula.
 The command delegates to Homebrew and returns its exit status. It does not
 update installations made from a Python package or source checkout.
 
+Run `fmide update` for the guided update path. When the running CLI code is
+inside the Homebrew formula, this calls the same `brew upgrade` operation.
+Otherwise it checks the latest stable GitHub release and reports whether this
+copy is current. If a newer version exists, it prints general instructions for
+updating the current environment. It never installs packages, replaces files,
+or executes a downloaded installer. For a source checkout, update the checkout
+and reinstall into its virtual environment; for other Python installations,
+use the same package manager and environment that installed the CLI.
+
 The command sends the URL once and does not retry. FileMaker privilege checks,
 login, unsaved script dialogs, script errors and URL/payload size limits remain
 FileMaker/OS responsibilities. A parameter file changes how text is read; it does

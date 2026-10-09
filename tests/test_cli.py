@@ -112,6 +112,53 @@ class CLITests(unittest.TestCase):
         self.assertEqual(out, "")
         self.assertIn("usage: fmide brew upgrade", err)
 
+    @patch("fmide_cli.cli.brew_upgrade", return_value=0)
+    @patch("fmide_cli.cli.is_homebrew_install", return_value=True)
+    @patch("fmide_cli.cli.latest_release_version")
+    def test_update_uses_brew_for_homebrew_install(self, latest, _, brew):
+        code, out, err = self.run_cli(["update"])
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("managed by Homebrew", out)
+        brew.assert_called_once_with()
+        latest.assert_not_called()
+
+    @patch("fmide_cli.cli.latest_release_version", return_value="99.0.0")
+    @patch("fmide_cli.cli.is_homebrew_install", return_value=False)
+    def test_update_reports_new_release_without_self_modifying(self, _, latest):
+        code, out, err = self.run_cli(["update"])
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("latest stable release is v99.0.0", out)
+        self.assertIn("same method you used to install it", out)
+        self.assertIn(".venv/bin/python -m pip install .", out)
+        latest.assert_called_once_with()
+
+    @patch("fmide_cli.cli.latest_release_version", return_value="0.4.4")
+    @patch("fmide_cli.cli.is_homebrew_install", return_value=False)
+    def test_update_reports_current_version(self, _, latest):
+        code, out, err = self.run_cli(["update"])
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("already have the latest release", out)
+        latest.assert_called_once_with()
+
+    @patch("fmide_cli.cli.latest_release_version", side_effect=OSError("offline"))
+    @patch("fmide_cli.cli.is_homebrew_install", return_value=False)
+    def test_update_offline_gives_release_link_and_install_guidance(self, _, latest):
+        code, out, err = self.run_cli(["update"])
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("Could not check the latest GitHub release", out)
+        self.assertIn("github.com/fmIDE/fmIDE-CLI/releases", out)
+        self.assertIn("same method you used to install it", out)
+        latest.assert_called_once_with()
+
+    def test_update_help_and_unknown_arguments(self):
+        code, out, err = self.run_cli(["update", "--help"])
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("usage: fmide update", out)
+        code, out, err = self.run_cli(["update", "--force"])
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertIn("usage: fmide update", err)
+
     @patch("fmide_cli.cli.open_url", side_effect=InputError("launch failed"))
     def test_launch_failure(self, _):
         code, out, err = self.run_cli(["-file", "fmIDE"])
