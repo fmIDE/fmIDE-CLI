@@ -12,7 +12,10 @@ Choose the command form that matches what you want to do:
 For Show and Act, the target database must contain the `fmIDE` script and allow
 URL script execution through the `fmurlscript` extended privilege. The examples
 use the `fmIDE` demo database. Quote `$` expressions and URLs with single quotes
-in POSIX shells. The `-$` option itself needs no quotes in zsh or bash.
+in POSIX shells. The `-$` option itself needs no quotes in zsh or bash. A target
+database must be supplied with `-file` or included in the `-url`; the CLI never
+tries to discover an open FileMaker database. Running `fmide` with no arguments
+prints usage.
 
 ## 1. Show
 
@@ -174,7 +177,8 @@ An existing nonempty `script` name remains unchanged.
 
 These options apply to all four use cases:
 
-- `-file` chooses the database, with or without `.fmp12`.
+- `-file` chooses the database, with or without `.fmp12`. If omitted, the `-url`
+  must already contain a database name.
 - `-fmp` chooses the FileMaker client: for example `fmp26` or `26`.
   The default is `fmp`, which uses the client's registered URL handler.
 - `-server` chooses a host/IP, `$` for an already-open file, or `~` for the
@@ -183,24 +187,13 @@ These options apply to all four use cases:
   brackets, for example `[::1]:5003`.
 
 When following a link, its target details are used unless an option overrides
-them. The defaults above apply when a detail is absent.
-
-No file, an empty file, or the literal placeholder `«file»` requests frontmost-file
-detection. On macOS the CLI resolves the app registered for the selected FMP
-scheme and matches its frontmost document window to its database. It uses the
-database name, not a guessed window title. It does not launch FileMaker merely
-to discover a target. If detection is unavailable, ambiguous, denied or times
-out, it fails with an instruction to use `-file`. It never silently chooses a
-different database. macOS may request Automation access for the terminal.
-FileMaker can also reject Apple events when its `fmextscriptaccess` extended
-privilege is disabled; use an explicit file in that case.
-On Windows supply `-file` explicitly.
+them. Protocol and server have defaults when absent; the database does not.
+If a link has no database name, supply `-file`.
 
 ## Preview and results
 
 Add `--dry-run` (or `--print-url`) to any use case to print the resulting URL
-without opening it. Specify `-file`, or use a link containing a file name,
-to preview without querying FileMaker for the frontmost database.
+without opening it. Specify `-file`, or use a link containing a file name.
 
 ```sh
 fmide -file fmIDE -$ 'layout_name=fmIDE Examples' --dry-run
@@ -231,7 +224,7 @@ The positional script parameter appears at most once; options can precede it.
 | `--parameter-file` | UTF-8 script file (optional BOM), or `-` for stdin. Mutually exclusive with positional parameter. |
 | `-frontmatter`, `--frontmatter` | Prepend FileMaker `Let` assignments; repeatable in argument order. |
 | `-url`, `--url` | Open an FMP URL or thingamajig URI; combine with other options to modify it. |
-| `-file`, `--file` | Database name, optionally with `.fmp12`; defaults to link's file, then frontmost file. |
+| `-file`, `--file` | Database name, optionally with `.fmp12`; uses the file in `-url` when present. Required if the URL has no file. |
 | `-fmp`, `--fmp` | `fmp`, `fmp26`, `26`, or `fmp26://`; defaults to link's scheme, then `fmp`. |
 | `-server`, `--server` | Host/IP, `$` or `~`; defaults to link's host, then `$`. |
 | `-port`, `--port` | Integer 1–65535; replaces a port in the chosen server. Requires a host/IP. |
@@ -242,7 +235,7 @@ The positional script parameter appears at most once; options can precede it.
 ## Exit codes and operational limits
 
 - `0`: URL printed or accepted for dispatch; not proof of script completion.
-- `1`: invalid target, input-file error, discovery failure or dispatch failure.
+- `1`: invalid target, input-file error or dispatch failure.
 - `2`: command-line syntax error.
 - `130`: interrupted.
 

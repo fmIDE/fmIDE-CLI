@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Callable
 from urllib.parse import quote, unquote, urlencode, urlsplit
 
 
@@ -139,19 +138,15 @@ class Options:
     query_parameters: list[tuple[str, str]] = field(default_factory=list)
 
 
-def build_url(options: Options, resolve_file: Callable[[str], str] | None = None) -> str:
+def build_url(options: Options) -> str:
     base = urlsplit(normalize_url(options.url)) if options.url is not None else urlsplit("fmp://$/")
     if base.fragment:
         raise InputError("URL fragments are not supported; encode literal # as %23")
     scheme = protocol(options.fmp if options.fmp is not None else base.scheme)
     host = authority(options.server if options.server is not None else base.netloc or "$", options.port)
     file = options.file if options.file is not None else unquote(base.path.lstrip("/"), errors="strict")
-    if file in ("", "«file»"):
-        if resolve_file is None:
-            raise InputError("cannot determine the frontmost file; specify -file NAME")
-        file = resolve_file(scheme)
     if not file or any(c in file for c in "\r\n\x00"):
-        raise InputError("a nonempty file name is required; specify -file NAME")
+        raise InputError("a nonempty database name is required; specify -file NAME or include it in -url")
     items = parse_query(base.query)
     # Explicit native FMP query fields override the base URL in request order.
     for key, value in options.query_parameters:

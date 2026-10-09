@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from fmide_cli.cli import main
-from fmide_cli.system import frontmost_file, open_url
+from fmide_cli.system import open_url
 from fmide_cli.urls import InputError
 from tests.test_urls import query
 
@@ -69,12 +69,22 @@ class CLITests(unittest.TestCase):
             main(["--unknown"])
         self.assertEqual(exc.exception.code, 2)
 
-    @patch("fmide_cli.cli.frontmost_file", return_value="fmIDE")
-    def test_implicit_frontmost(self, resolver):
-        code, out, _ = self.run_cli(["--dry-run", "-fmp", "26"])
+    @patch("fmide_cli.cli.open_url")
+    def test_no_arguments_print_usage_without_accessing_filemaker(self, opener):
+        code, out, err = self.run_cli([])
         self.assertEqual(code, 0)
-        resolver.assert_called_once_with("fmp26")
-        self.assertEqual(out.strip(), "fmp26://$/fmIDE?script=fmIDE")
+        self.assertIn("usage: fmide", out)
+        self.assertIn("-file", out)
+        self.assertEqual(err, "")
+        opener.assert_not_called()
+
+    def test_missing_database_requires_explicit_target(self):
+        for args in (["--dry-run"], ["-fmp", "26", "--dry-run"], ["-url", "fmp26://$/"]):
+            with self.subTest(args=args):
+                code, out, err = self.run_cli(args)
+                self.assertEqual(code, 1)
+                self.assertEqual(out, "")
+                self.assertIn("specify -file NAME or include it in -url", err)
 
     @patch("fmide_cli.cli.open_url", side_effect=InputError("launch failed"))
     def test_launch_failure(self, _):
@@ -94,21 +104,7 @@ class SystemTests(unittest.TestCase):
     @patch("fmide_cli.system.sys.platform", "linux")
     def test_other_platform_requires_explicit_file_and_preview(self):
         with self.assertRaises(InputError):
-            frontmost_file("fmp")
-        with self.assertRaises(InputError):
             open_url("fmp://$/DB")
-
-    @patch("fmide_cli.system.sys.platform", "darwin")
-    @patch("fmide_cli.system.subprocess.run", return_value=subprocess.CompletedProcess([], 0, "Actual DB\n"))
-    def test_frontmost_success(self, run):
-        self.assertEqual(frontmost_file("fmp26"), "Actual DB")
-        self.assertEqual(run.call_args.args[0][-1], "fmp26")
-
-    @patch("fmide_cli.system.sys.platform", "darwin")
-    @patch("fmide_cli.system.subprocess.run", side_effect=subprocess.TimeoutExpired("osascript", 15))
-    def test_frontmost_timeout_has_actionable_error(self, _):
-        with self.assertRaisesRegex(InputError, "-file NAME"):
-            frontmost_file("fmp26")
 
     @patch("fmide_cli.system.sys.platform", "darwin")
     @patch("fmide_cli.system.subprocess.run", side_effect=subprocess.CalledProcessError(1, "open"))

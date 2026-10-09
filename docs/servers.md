@@ -177,8 +177,8 @@ CLI options, including mixed aliases such as `url` and `-url`, are rejected.
 Empty native values are allowed; target options and `-url` require a value.
 
 Requests never change saved settings. A database must come from the request,
-embedded URL or saved `-file`; HTTP requests do not query FileMaker for the
-frontmost database. All requests use `NAME=VALUE`, with at most 256 fields and
+embedded URL or saved `-file`; HTTP requests do not query FileMaker to discover
+a database. All requests use `NAME=VALUE`, with at most 256 fields and
 16,384 characters in the outer request URL. Malformed percent escapes and UTF-8
 are rejected.
 
@@ -305,6 +305,14 @@ management requests. A normal browser link navigation intentionally dispatches
 its FMP URL; only open forwarding links whose actions you intend to run.
 Background workers survive closing the starting terminal but are not login
 services and do not automatically restart after a reboot.
+
+For browser navigations, an accepted request redirects to a clean, short-lived
+receipt page. The redirect replaces the action URL in that history entry, so
+Back and Forward can revisit the receipt without dispatching the FMP URL again.
+Receipts are held in worker memory for up to ten minutes (at most 128 at once),
+and disappear when the server restarts. They report that the operating system
+accepted the URL; FileMaker execution is still asynchronous. Requests from
+non-browser clients continue to receive the JSON acceptance response directly.
 
 ## Upgrading a running worker
 

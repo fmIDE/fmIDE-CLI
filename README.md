@@ -30,6 +30,9 @@ own database name when working in another solution.
 Quote URLs and `$` expressions with **single quotes** in POSIX shells.
 The `-$` option itself needs no quotes in zsh or bash; keep its assignment value quoted.
 `--variable` is a long alias for `-$`.
+Running `fmide` with no arguments prints usage. The CLI never guesses which
+FileMaker client or open database to target: supply `-file`, or use a `-url`
+that includes a database name.
 
 ## 1. Show
 
@@ -51,9 +54,8 @@ When the URL does not already have a `script` parameter, the CLI adds
 `?script=fmIDE`. It also encodes the `-$` parameters for you, so names and values
 can be entered directly without manually URL-encoding them.
 
-Add `-fmp fmp26` to choose FileMaker 26. On macOS, you can omit `-file` to use
-the frontmost database in the selected FileMaker client, when its permissions
-allow discovery. See [choosing the target](docs/cli.md#choosing-the-target).
+Add `-fmp fmp26` to choose FileMaker 26. See
+[choosing the target](docs/cli.md#choosing-the-target).
 
 ## 2. Act
 

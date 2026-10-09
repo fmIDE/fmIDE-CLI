@@ -19,6 +19,7 @@ import socketserver
 import subprocess
 import tempfile
 import threading
+import time
 from urllib.parse import quote, urlsplit
 
 from .http_options import request_options
@@ -28,6 +29,8 @@ from .system import open_url
 from .urls import InputError, build_url
 
 MAX_URL = 16384
+RECEIPT_TTL_SECONDS = 10 * 60
+MAX_RECEIPTS = 128
 
 
 def control(runtime: dict, action: str = 'status', timeout: float = 1) -> dict:
@@ -148,6 +151,9 @@ def logger_for(store: Store, index: str) -> logging.Logger:
 
 def handler_class(store: Store, index: str, runtime: dict, stopped: threading.Event,
                   logger: logging.Logger, dispatch=open_url):
+    receipts = {}
+    receipts_lock = threading.Lock()
+
     class Handler(BaseHTTPRequestHandler):
         server_version = 'fmIDE'
         sys_version = ''
@@ -175,6 +181,53 @@ def handler_class(store: Store, index: str, runtime: dict, stopped: threading.Ev
             self.end_headers()
             self.wfile.write(body)
             self.wfile.flush()
+
+        def redirect(self, location: str):
+            self.send_response(303)
+            self.send_header('Location', location)
+            self.send_header('Content-Length', '0')
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Connection', 'close')
+            self.end_headers()
+
+        def is_browser_navigation(self) -> bool:
+            return (self.headers.get('Sec-Fetch-Mode') == 'navigate'
+                    and 'text/html' in self.headers.get('Accept', '').lower())
+
+        def save_receipt(self, data: dict) -> str:
+            now = time.monotonic()
+            receipt_id = secrets.token_urlsafe(24)
+            with receipts_lock:
+                for key, (created, _) in list(receipts.items()):
+                    if now - created > RECEIPT_TTL_SECONDS:
+                        del receipts[key]
+                while len(receipts) >= MAX_RECEIPTS:
+                    del receipts[next(iter(receipts))]
+                receipts[receipt_id] = (now, data)
+            return receipt_id
+
+        def show_receipt(self, receipt_id: str):
+            now = time.monotonic()
+            with receipts_lock:
+                item = receipts.get(receipt_id)
+                if item and now - item[0] > RECEIPT_TTL_SECONDS:
+                    del receipts[receipt_id]
+                    item = None
+            if item is None:
+                self.reply(404, {'error': 'receipt expired or not found'})
+                return
+            body = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
+                    '<meta name="viewport" content="width=device-width, initial-scale=1">'
+                    '<title>fmIDE Gateway result</title><style>'
+                    'body{max-width:760px;margin:3rem auto;padding:0 1.5rem;'
+                    'font:16px/1.6 system-ui,sans-serif;color:#172b3a;background:#f8fafc}'
+                    'pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#e8eef3;'
+                    'padding:1rem;border-radius:6px}</style></head><body>'
+                    '<h1>fmIDE Gateway result</h1><p>The operating system accepted the FileMaker URL. '
+                    'FileMaker execution is asynchronous.</p><pre>'
+                    + escape(json.dumps(item[1], indent=2))
+                    + '</pre><p><a href="/">Gateway home</a></p></body></html>')
+            self.reply_body(200, body.encode('utf-8'), 'text/html; charset=utf-8')
 
         def welcome(self):
             address = f'{runtime.get("scheme", "http")}://localhost:{runtime["port"]}'
@@ -372,6 +425,16 @@ Full documentation: https://github.com/fmIDE/fmIDE-CLI/blob/main/docs/servers.md
             except ValueError:
                 self.reply(400, {'error': 'invalid request URL'})
                 return
+            if path.path.startswith('/_fmide/receipt/'):
+                if method != 'GET' or path.query:
+                    self.reply(404, {'error': 'receipt not found'})
+                    return
+                receipt_id = path.path.removeprefix('/_fmide/receipt/')
+                if not re.fullmatch(r'[A-Za-z0-9_-]{32}', receipt_id):
+                    self.reply(404, {'error': 'receipt not found'})
+                    return
+                self.show_receipt(receipt_id)
+                return
             if path.path.startswith('/_fmide/'):
                 expected = 'Bearer ' + runtime['token']
                 if not hmac.compare_digest(self.headers.get('Authorization', '').encode('utf-8'), expected.encode('utf-8')):
@@ -423,7 +486,12 @@ Full documentation: https://github.com/fmIDE/fmIDE-CLI/blob/main/docs/servers.md
                 self.reply(502, {'error': 'could not dispatch to FileMaker; check the selected URL handler'})
                 return
             logger.info('forward accepted by operating system; %s', summary)
-            self.reply(200, {'accepted': True, 'message': 'OS accepted the URL; FileMaker execution is asynchronous'})
+            result = {'accepted': True, 'message': 'OS accepted the URL; FileMaker execution is asynchronous'}
+            if self.is_browser_navigation():
+                receipt_id = self.save_receipt(result)
+                self.redirect('/_fmide/receipt/' + receipt_id)
+            else:
+                self.reply(200, result)
     return Handler
 
 

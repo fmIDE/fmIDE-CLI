@@ -242,6 +242,39 @@ class HTTPTests(unittest.TestCase):
         self.assertNotIn('Private Layout', log)
         self.assertNotIn('Old DB', log)
 
+    def test_browser_navigation_redirects_to_receipt_without_replaying_action(self):
+        connection = HTTPConnection('127.0.0.1', self.runtime['port'], timeout=3)
+        try:
+            connection.request('GET', '/?-$=layout_name=Home', headers={
+                'Accept': 'text/html,application/xhtml+xml', 'Sec-Fetch-Mode': 'navigate'})
+            response = connection.getresponse()
+            self.assertEqual(response.status, 303)
+            receipt_path = response.getheader('Location')
+            self.assertRegex(receipt_path, r'^/_fmide/receipt/[A-Za-z0-9_-]{32}$')
+            self.assertEqual(response.read(), b'')
+            self.assertEqual(self.urls, ['fmp19://fm.example.com:5003/Old%20DB?script=fmIDE&$layout_name=Home'])
+            connection.request('GET', receipt_path, headers={
+                'Accept': 'text/html', 'Sec-Fetch-Mode': 'navigate'})
+            receipt = connection.getresponse()
+            body = receipt.read()
+            self.assertEqual(receipt.status, 200)
+            self.assertIn(b'OS accepted the URL', body)
+            self.assertIn(b'FileMaker execution is asynchronous', body)
+            self.assertEqual(len(self.urls), 1)
+            connection.request('GET', receipt_path, headers={
+                'Accept': 'text/html', 'Sec-Fetch-Mode': 'navigate'})
+            self.assertEqual(connection.getresponse().status, 200)
+            self.assertEqual(len(self.urls), 1)
+        finally:
+            connection.close()
+
+    def test_non_browser_forward_keeps_json_response(self):
+        code, data = self.request('/?' + urlencode({'$layout_name': 'Home'}), headers={
+            'Accept': 'application/json', 'Sec-Fetch-Mode': 'cors'})
+        self.assertEqual(code, 200)
+        self.assertTrue(data['accepted'])
+        self.assertEqual(len(self.urls), 1)
+
     def test_listener_startup_does_not_depend_on_reverse_dns(self):
         with patch('socket.getfqdn', side_effect=AssertionError('reverse DNS must not run')):
             with ForwardingHTTPServer(('127.0.0.1', 0), self.server.RequestHandlerClass) as server:

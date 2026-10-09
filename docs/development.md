@@ -34,12 +34,6 @@ fmIDE's native data-file actions and FileMaker's ConvertToFileMakerPath function
 The temporary directory is removed after the test. Inspect FileMaker if it
 times out; resolve the dialog before trying again.
 
-To check frontmost targeting without executing a script:
-
-```sh
-fmide -fmp fmp26 --dry-run
-```
-
 ## Packaging
 
 ```sh

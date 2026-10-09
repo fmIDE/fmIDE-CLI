@@ -1,5 +1,4 @@
 import unittest
-from unittest.mock import Mock
 from urllib.parse import parse_qsl, urlsplit
 
 from fmide_cli.urls import InputError, Options, build_url, frontmatter
@@ -102,19 +101,10 @@ class URLTests(unittest.TestCase):
     def test_existing_custom_script_is_preserved(self):
         self.assertEqual(query(build_url(Options(url="fmp://$/DB?script=Custom")))["script"], "Custom")
 
-    def test_frontmost_used_only_when_needed(self):
-        resolver = Mock(return_value="Actual Database")
-        for options in (Options(), Options(file="«file»"), Options(url="fmp26://$/%C2%ABfile%C2%BB")):
-            url = build_url(options, resolver)
-            self.assertEqual(urlsplit(url).path, "/Actual%20Database")
-        resolver.assert_called_with("fmp26")
-        resolver.reset_mock()
-        build_url(Options(file="Explicit"), resolver)
-        resolver.assert_not_called()
-
     def test_missing_file_fails(self):
-        with self.assertRaisesRegex(InputError, "-file"):
-            build_url(Options())
+        for options in (Options(), Options(file=""), Options(url="fmp26://$/")):
+            with self.subTest(options=options), self.assertRaisesRegex(InputError, "-file NAME"):
+                build_url(options)
 
     def test_reject_other_urls_and_fragments(self):
         for value in ("https://example.com/DB", "javascript:evil", "file:///tmp/DB", "fmp://$/DB#fragment"):

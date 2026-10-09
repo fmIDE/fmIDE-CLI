@@ -6,14 +6,14 @@ from pathlib import Path
 import sys
 
 from . import __version__
-from .system import frontmost_file, open_url
+from .system import open_url
 from .urls import InputError, Options, build_url
 
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="fmide", allow_abbrev=False,
-        description="Call fmIDE using a FileMaker URL. Omit -file to use the frontmost file on macOS.",
+        description="Call fmIDE using a FileMaker URL. Specify the target database with -file or in -url.",
         epilog="Use fmide server --help for localhost HTTP(S) forwarding. Quote URLs, variable assignments and FileMaker calculations to protect them from your shell. "
                "Use -- before a script parameter starting with '-'. "
                "A successful exit means the URL was dispatched, not that the FileMaker script finished.",
@@ -43,6 +43,9 @@ def main(argv: list[str] | None = None) -> int:
         from .servers import main as server_main
         return server_main(argv[1:])
     cli = parser()
+    if not argv:
+        cli.print_help()
+        return 0
     args = cli.parse_args(argv)
     if args.parameter_file is not None and args.parameter is not None:
         cli.error("use either a script parameter or --parameter-file, not both")
@@ -57,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
             url=args.url, fmp=args.fmp, server=args.server, port=args.port,
             file=args.file, variables=args.variables, frontmatter=args.frontmatter, parameter=parameter,
         )
-        url = build_url(options, resolve_file=frontmost_file)
+        url = build_url(options)
         if args.dry_run:
             print(url)
         else:

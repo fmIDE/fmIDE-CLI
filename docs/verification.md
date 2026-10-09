@@ -30,17 +30,12 @@ The Name that Thing `layout_name` parameter was also tested by navigating to
 `fmIDE Examples` and back to the original `fmIDE Tests` layout. The resulting
 FileMaker layouts were visually verified; no blocking dialog appeared.
 
-## Frontmost-file discovery limitation
+## Target selection
 
-The real macOS discovery call was attempted. FileMaker rejected the read of its
-windows with `A privilege violation occurred`. Automatic targeting could not be
-verified in this file's current permission configuration. The CLI reports an
-actionable error and accepts `-file fmIDE`. No FileMaker privileges were changed.
-[Claris documents the fmextscriptaccess requirement](https://help.claris.com/en/pro-help/content/scripting-apple-events.html).
-
-Successful frontmost discovery is covered with a mocked operating-system
-response; that is not a claim of successful live discovery. Windows dispatch is
-implemented but was not tested against a live Windows FileMaker installation.
+The CLI requires an explicit database name through `-file` or an FMP URL that
+contains one. It does not inspect running FileMaker clients to guess a target.
+Windows dispatch is implemented but was not tested against a live Windows
+FileMaker installation.
 
 ## Packaging and hosted CI
 

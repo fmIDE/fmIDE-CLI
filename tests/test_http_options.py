@@ -69,7 +69,7 @@ class HTTPOptionsTests(unittest.TestCase):
                                     frontmatter=['$x = "A+B"', '$y = 2']))
         self.assertEqual(self.build(query), expected)
 
-    def test_saved_file_allows_short_request_without_frontmost_lookup(self):
+    def test_saved_file_allows_short_request_without_database_in_request(self):
         self.assertIn('/Saved?', self.build('$layout_name=fmIDE%20Actions', {'file': 'Saved'}))
         with self.assertRaises(InputError):
             self.build('$layout_name=Home')
