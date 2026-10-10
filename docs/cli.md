@@ -116,11 +116,17 @@ fmide -url 'fmIDE&$script_name=fmIDE'
 | `fmp26//$/DB` | `fmp26://$/DB` |
 | `https://fmp26//$/DB` | `fmp26://$/DB` |
 | `http://fmp26://$/DB` | `fmp26://$/DB` |
+| `http://invalid url/fmp://$/DB` | `fmp://$/DB` |
+| `https://invalid%20url/fmp26://$/DB` | `fmp26://$/DB` |
 | `fmp26%3A%2F%2F$/DB` | `fmp26://$/DB` |
 | `DB&$script_name=Hello` | `fmp://$/DB?script=fmIDE&$script_name=Hello` |
 | `host/DB&$script_name=Hello` | `fmp://host/DB?script=fmIDE&$script_name=Hello` |
 | `fmp19/host/DB` | `fmp19://host/DB` |
 | `fmp19//DB` | `fmp19://$/DB` |
+
+The `invalid url` wrapper is removed only when followed by an FMP prefix;
+a wrapper without that prefix is rejected. The embedded URL is not decoded
+as a whole, so encoded parameter delimiters remain intact.
 
 Only known prefix repairs are performed. Unrelated HTTP, file, or JavaScript
 URLs are rejected. URL fragments are rejected: encode literal `#` as `%23` in

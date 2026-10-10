@@ -1,7 +1,7 @@
 import unittest
 from urllib.parse import parse_qsl, urlsplit
 
-from fmide_cli.urls import InputError, Options, build_url, frontmatter
+from fmide_cli.urls import InputError, Options, build_url, frontmatter, normalize_url
 
 
 def query(url):
@@ -28,6 +28,27 @@ class URLTests(unittest.TestCase):
                       "fmp26%3A%2F%2F$/fmIDE", "FMP26:///$/fmIDE"):
             with self.subTest(value=value):
                 self.assertEqual(build_url(Options(url=value)), "fmp26://$/fmIDE?script=fmIDE")
+
+    def test_invalid_url_wrapper_preserves_payload(self):
+        suffix = '$/Rechnung?script=fmIDE&$custom_function_name=G_J_&param=a+b%26c%3Fd%2520'
+        for wrapper in ('http://invalid url/', 'http://invalid%20url/',
+                        'https://INVALID%20URL/'):
+            for prefix, canonical in (('fmp://', 'fmp://'), ('fmp26//', 'fmp26://'),
+                                      ('fmp26%3A%2F%2F', 'fmp26://')):
+                with self.subTest(wrapper=wrapper, prefix=prefix):
+                    value = wrapper + prefix + suffix
+                    self.assertEqual(normalize_url(value), canonical + suffix)
+                    self.assertEqual(build_url(Options(url=value)),
+                                     build_url(Options(url=canonical + suffix)))
+
+    def test_invalid_url_wrapper_requires_embedded_fmp_target(self):
+        for value in ('http://invalid url/$/Rechnung',
+                      'http://invalid%20url/https://example.com/DB',
+                      'https://example.com/fmp://$/DB',
+                      'http://invalid url/fmp0://$/DB',
+                      'http://invalid url/fmp://$/DB#fragment'):
+            with self.subTest(value=value), self.assertRaises(InputError):
+                build_url(Options(url=value))
 
     def test_thingamajigs(self):
         for value, expected in (

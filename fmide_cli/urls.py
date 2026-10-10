@@ -29,6 +29,12 @@ def normalize_url(value: str) -> str:
     if re.search(r"[\x00-\x1f]", value):
         raise InputError("URL contains control characters; percent-encode parameter values")
     # Repair only the prefix: decoding the entire URL would destroy encoded &/?.
+    # Some clients wrap unsupported schemes in an "invalid url" HTTP target.
+    # Require an embedded FMP prefix; never infer a target from a bare wrapper.
+    value = re.sub(
+        r"^https?://invalid(?: |%20)url/(?=fmp[0-9]*(?::|/|%3[aA]))",
+        "", value, flags=re.I,
+    )
     value = re.sub(r"^(fmp[0-9]*)%3[aA](?:%2[fF]){2}", r"\1://", value, flags=re.I)
     value = re.sub(r"^https?://(?=fmp[0-9]*(?::|/))", "", value, flags=re.I)
     match = re.match(r"^(fmp[0-9]*)(?::/*|/+)", value, re.I)
